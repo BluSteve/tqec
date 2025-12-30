@@ -28,8 +28,6 @@ if __name__ == "__main__":
         print(circ)
         master_circuit += circ
 
-    print(master_circuit)
-
     """
     for p in range(1, 4):
         n = 10**p
