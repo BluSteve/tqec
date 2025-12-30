@@ -366,7 +366,9 @@ class LayerTree:
         annotations = self._get_annotation(k)
         assert annotations.qubit_map is not None
 
-        # circuit = stim.Circuit()
+        circuit = stim.Circuit()
+        yield circuit  # yield empty circuit to breakpoint after annotations generation
+
         # if include_qubit_coords:
         #     circuit += annotations.qubit_map.to_circuit() # I think this adds detector annotations
 

@@ -187,7 +187,7 @@ class LayerNode:
             # if add_polygons:
             #     ret.insert(0, annotations.polygons)
 
-        if isinstance(self._layer, SequencedLayers):  # I think only this one is used for now.
+        if isinstance(self._layer, SequencedLayers):
             for child, next_child in itertools.pairwise(self._children):
                 circ = child.generate_circuits_with_potential_polygons(
                     k, global_qubit_map, add_polygons
