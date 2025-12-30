@@ -155,6 +155,8 @@ def compile_block_graph(
             for surface in observables
         ]
 
+    print("here1")
+
     # 1. Create topological computation graph
     graph = TopologicalComputationGraph(
         _DEFAULT_SCALABLE_QUBIT_SHAPE,
@@ -162,11 +164,15 @@ def compile_block_graph(
         observable_builder=convention.triplet.observable_builder,
     )
 
+    print("here2")
+
     # 2. Add cubes to the graph
     for cube in block_graph.cubes:
         spec = cube_specs[cube]
         position = BlockPosition3D(cube.position.x, cube.position.y, cube.position.z)
         graph.add_cube(position, convention.triplet.cube_builder(spec, block_temporal_height))
+
+    print("here3")
 
     # 3. Add pipes to the graph
     # Note that the order of the pipes to add is important.
@@ -196,5 +202,7 @@ def compile_block_graph(
             ),
         )
         graph.add_pipe(pos1, pos2, convention.triplet.pipe_builder(key, block_temporal_height))
+
+    print("here4")
 
     return graph

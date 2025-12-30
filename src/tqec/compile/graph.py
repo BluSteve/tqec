@@ -43,6 +43,7 @@ For temporal pipes, the layers are replaced in-place within block instances.
 
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Final
 
@@ -472,7 +473,7 @@ class TopologicalComputationGraph:
         do_not_use_database: bool = False,
         only_use_database: bool = False,
         reschedule_measurements: bool = True,
-    ) -> stim.Circuit:
+    ) -> Iterator[stim.Circuit]:
         """Generate the ``stim.Circuit`` from the compiled graph.
 
         Args:
@@ -503,7 +504,7 @@ class TopologicalComputationGraph:
             A compiled stim circuit.
 
         """
-        circuit = self.to_layer_tree().generate_circuit(
+        yield from self.to_layer_tree().generate_circuit(
             k,
             manhattan_radius=manhattan_radius,
             detector_database=detector_database,
@@ -513,9 +514,9 @@ class TopologicalComputationGraph:
             reschedule_measurements=reschedule_measurements,
         )
         # If provided, apply the noise model.
-        if noise_model is not None:
-            circuit = noise_model.noisy_circuit(circuit)
-        return circuit
+        # if noise_model is not None: # todo do noise_model later
+        #     circuit = noise_model.noisy_circuit(circuit)
+        # return circuit
 
     def generate_crumble_url(
         self,

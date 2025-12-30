@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Any
@@ -264,7 +264,7 @@ class LayerTree:
         only_use_database: bool = False,
         lookback: int = 2,
         reschedule_measurements: bool = True,
-    ) -> stim.Circuit:
+    ) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing ``self``.
 
         This method first annotates the tree according to the provided arguments
@@ -366,11 +366,12 @@ class LayerTree:
         annotations = self._get_annotation(k)
         assert annotations.qubit_map is not None
 
-        circuit = stim.Circuit()
-        if include_qubit_coords:
-            circuit += annotations.qubit_map.to_circuit()
-        circuit += self._root.generate_circuit(k, annotations.qubit_map)
-        return circuit
+        # circuit = stim.Circuit()
+        # if include_qubit_coords:
+        #     circuit += annotations.qubit_map.to_circuit() # I think this adds detector annotations
+
+        yield annotations.qubit_map.to_circuit()
+        yield from self._root.generate_circuit(k, annotations.qubit_map)
 
     def _get_annotation(self, k: int) -> LayerTreeAnnotations:
         return self._annotations.setdefault(k, LayerTreeAnnotations())

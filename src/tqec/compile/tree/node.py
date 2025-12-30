@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import itertools
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, TypeGuard
 
 import stim
@@ -141,7 +141,7 @@ class LayerNode:
         k: int,
         global_qubit_map: QubitMap,
         add_polygons: bool = False,
-    ) -> list[stim.Circuit | list[Polygon]]:
+    ) -> Iterator[stim.Circuit | list[Polygon]]:
         """Generate the circuits and polygons for each nodes in the subtree rooted at ``self``.
 
         Args:
@@ -183,29 +183,36 @@ class LayerNode:
                     "SHIFT_COORDS", [], StimCoordinates(0, 0, 1).to_stim_coordinates()
                 )
             )
-            ret: list[stim.Circuit | list[Polygon]] = [
-                mapped_circuit.get_circuit(include_qubit_coords=False)
-            ]
-            if add_polygons:
-                ret.insert(0, annotations.polygons)
+            yield mapped_circuit.get_circuit(include_qubit_coords=False)
+            # if add_polygons:
+            #     ret.insert(0, annotations.polygons)
 
-            return ret
-
-        if isinstance(self._layer, SequencedLayers):
-            ret = []
+        if isinstance(self._layer, SequencedLayers):  # I think only this one is used for now.
             for child, next_child in itertools.pairwise(self._children):
-                ret += child.generate_circuits_with_potential_polygons(
+                circ = child.generate_circuits_with_potential_polygons(
                     k, global_qubit_map, add_polygons
                 )
+
+                # for each element in circ, we need to modify it
                 if not next_child.is_repeated:
-                    assert isinstance(ret[-1], stim.Circuit)
-                    ret[-1].append("TICK", [], [])
-            ret += self._children[-1].generate_circuits_with_potential_polygons(
+                    # print(type(circ))
+                    # assert isinstance(circ, stim.Circuit)
+                    # circ.append("TICK", [], [])
+
+                    tick = stim.Circuit()
+                    tick.append("TICK", [], [])
+                    circ = itertools.chain(
+                        circ, [tick]
+                    )  # add TICK at the end if next child is not repeated
+
+                yield from circ
+
+            yield from self._children[-1].generate_circuits_with_potential_polygons(
                 k, global_qubit_map, add_polygons
             )
-            return ret
 
         if isinstance(self._layer, RepeatedLayer):
+            print("uh oh, repeated layer")
             body = self._children[0].generate_circuits_with_potential_polygons(
                 k, global_qubit_map, add_polygons=add_polygons
             )
@@ -220,9 +227,10 @@ class LayerNode:
                 ret.append(body[0])
             ret.append(body_circuit * self._layer.repetitions.integer_eval(k))
             return ret
-        raise TQECError(f"Unknown layer type found: {type(self._layer).__name__}.")
 
-    def generate_circuit(self, k: int, global_qubit_map: QubitMap) -> stim.Circuit:
+        # raise TQECError(f"Unknown layer type found: {type(self._layer).__name__}.")
+
+    def generate_circuit(self, k: int, global_qubit_map: QubitMap) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing the node.
 
         Args:
@@ -239,8 +247,10 @@ class LayerNode:
         circuits = self.generate_circuits_with_potential_polygons(
             k, global_qubit_map, add_polygons=False
         )
-        ret = stim.Circuit()
-        for circuit in circuits:
-            assert isinstance(circuit, stim.Circuit)
-            ret += circuit
-        return ret
+        # ret = stim.Circuit()
+        # for circuit in circuits: # This is just a check to ensure no polygons.
+        #     assert isinstance(circuit, stim.Circuit)
+        #     ret += circuit
+        # return ret
+
+        return circuits
