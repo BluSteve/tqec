@@ -212,7 +212,6 @@ class LayerNode:
             )
 
         if isinstance(self._layer, RepeatedLayer):
-            print("uh oh, repeated layer")
             body = self._children[0].generate_circuits_with_potential_polygons(
                 k, global_qubit_map, add_polygons=add_polygons
             )
@@ -221,12 +220,16 @@ class LayerNode:
                 start=stim.Circuit(),
             )
             body_circuit.insert(0, stim.CircuitInstruction("TICK"))
+
+            # TODO add_polygons not supported
+            """
             ret = []
             if add_polygons:
                 # only keep the first set of polygons
                 ret.append(body[0])
-            ret.append(body_circuit * self._layer.repetitions.integer_eval(k))
-            return ret
+            """
+
+            yield body_circuit * self._layer.repetitions.integer_eval(k)
 
         # raise TQECError(f"Unknown layer type found: {type(self._layer).__name__}.")
 
