@@ -67,7 +67,7 @@ def memory(n: int, t: int) -> LayerTree:
                     except TQECError:
                         pass
 
-    graph.view_as_html("memory.html")
+    graph.view_as_html(f"memory_n{n}_t{t}.html")
 
     compiled_graph = compile_block_graph(graph, observables=None)
 
@@ -79,10 +79,10 @@ if __name__ == "__main__":
         writer = csv.writer(csvfile)
         # writer.writerow(["n", "k", "duration1", "duration2"])
 
-        for x in range(3, 10):
+        for x in range(9, 10):
             lt = memory(x, 3)
 
-            for k in range(6, 8):
+            for k in range(7, 8):
                 citer = lt.generate_circuit_stream(k)
                 master_circuit = stim.Circuit()
 
@@ -105,8 +105,11 @@ if __name__ == "__main__":
                     # if i == 10:
                     #     break
 
+                with open(f"master_circuit_n{x}_k{k}.stim", "w") as f:
+                    f.write(str(master_circuit))
+
                 end = time()
                 duration2 = end - start
-                writer.writerow([x, k, duration1, duration2])
+                # writer.writerow([x, k, duration1, duration2])
 
                 print(f"{x} {k} {duration1} {duration2}")
