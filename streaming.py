@@ -124,13 +124,14 @@ def benchmark():
 
 
 if __name__ == "__main__":
-    lt = memory(3, 3)
+    lt2 = memory(3, 3)
 
     k = 2
-    circuit = lt.generate_circuit(k)
+    circuit = lt2.generate_circuit(k)
 
-    magic_qm = lt._get_global_qubit_map(k)
+    magic_qm = lt2._get_global_qubit_map(k)
 
+    lt = memory(3, 3)
     citer = lt.generate_circuit_stream(k, qubit_map=magic_qm)
 
     master_circuit = stim.Circuit()
