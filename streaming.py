@@ -5,9 +5,7 @@ from time import time
 import stim
 
 from tqec import BlockGraph
-from tqec.circuit.qubit_map import QubitMap
 from tqec.compile.compile import compile_block_graph
-from tqec.compile.tree.node import QubitLister
 from tqec.compile.tree.tree import LayerTree
 from tqec.utils import TQECError
 from tqec.utils.position import Position3D
@@ -126,11 +124,14 @@ def benchmark():
 
 
 if __name__ == "__main__":
-    lt = memory(5, 5)
+    lt = memory(3, 3)
 
     k = 2
-    qubit_lister = QubitLister(k)
-    citer = lt.generate_circuit_stream(k, qubit_lister=qubit_lister)
+    circuit = lt.generate_circuit(k)
+
+    magic_qm = lt._get_global_qubit_map(k)
+
+    citer = lt.generate_circuit_stream(k, qubit_map=magic_qm)
 
     master_circuit = stim.Circuit()
     i = 0
@@ -138,10 +139,6 @@ if __name__ == "__main__":
         print(i)
         i += 1
         master_circuit += circ
-
-    qubit_map = QubitMap.from_qubits(sorted(qubit_lister.seen_qubits))
-
-    circuit = lt.generate_circuit(k)
 
     print(circuit == master_circuit)
 

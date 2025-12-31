@@ -253,7 +253,6 @@ class LayerNode:
     def generate_circuits_with_potential_polygons_stream(
         self,
         k: int,
-        qubit_lister: QubitLister,
         global_qubit_map: QubitMap,
         add_polygons: bool = False,
     ) -> Iterator[stim.Circuit | list[Polygon]]:
@@ -277,7 +276,6 @@ class LayerNode:
             will be kept.
 
         """
-        qubit_lister.visit_node(self)
         if isinstance(self._layer, LayoutLayer):
             annotations = self.get_annotations(k)
             base_circuit = self._layer.to_circuit(
@@ -310,7 +308,7 @@ class LayerNode:
         if isinstance(self._layer, SequencedLayers):
             for child, next_child in itertools.pairwise(self._children):
                 circ = child.generate_circuits_with_potential_polygons_stream(
-                    k, qubit_lister, global_qubit_map, add_polygons
+                    k, global_qubit_map, add_polygons
                 )
 
                 if not next_child.is_repeated:
@@ -323,12 +321,12 @@ class LayerNode:
                 yield from circ
 
             yield from self._children[-1].generate_circuits_with_potential_polygons_stream(
-                k, qubit_lister, global_qubit_map, add_polygons
+                k, global_qubit_map, add_polygons
             )
 
         if isinstance(self._layer, RepeatedLayer):
             body = self._children[0].generate_circuits_with_potential_polygons_stream(
-                k, qubit_lister, global_qubit_map, add_polygons=add_polygons
+                k, global_qubit_map, add_polygons=add_polygons
             )
             body_circuit = sum(
                 (i for i in body if isinstance(i, stim.Circuit)),
@@ -339,8 +337,7 @@ class LayerNode:
             if add_polygons:
                 yield from body  # only keep the first set of polygons
 
-            for _ in range(self._layer.repetitions.integer_eval(k)):
-                yield body_circuit
+            yield body_circuit * self._layer.repetitions.integer_eval(k)
 
     def generate_circuit(self, k: int, global_qubit_map: QubitMap) -> stim.Circuit:
         """Generate the quantum circuit representing the node.
@@ -365,9 +362,7 @@ class LayerNode:
             ret += circuit
         return ret
 
-    def generate_circuit_stream(
-        self, k: int, global_qubit_map: QubitMap, qubit_lister: QubitLister
-    ) -> Iterator[stim.Circuit]:
+    def generate_circuit_stream(self, k: int, global_qubit_map: QubitMap) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing the node.
 
         Args:
@@ -382,7 +377,7 @@ class LayerNode:
 
         """
         circuits = self.generate_circuits_with_potential_polygons_stream(
-            k, qubit_lister, global_qubit_map, add_polygons=False
+            k, global_qubit_map, add_polygons=False
         )
 
         return circuits

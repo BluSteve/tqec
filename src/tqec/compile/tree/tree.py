@@ -355,7 +355,7 @@ class LayerTree:
         only_use_database: bool = False,
         lookback: int = 2,
         reschedule_measurements: bool = True,
-        qubit_lister: QubitLister | None = None,
+        qubit_map: QubitMap | None = None,
     ) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing ``self``.
 
@@ -445,27 +445,30 @@ class LayerTree:
             else 1
         )
 
-        self._generate_annotations(
+        self._get_annotation(k).qubit_map = qubit_map
+
+        # Else, perform all the needed computations.
+        self._annotate_circuits(k, reschedule_measurements=reschedule_measurements)
+        # This method will also update the detector_database and save it to disk at database_path.
+        self._annotate_detectors(
             k,
             manhattan_radius,
-            detector_database=detector_database,
-            database_path=database_path,
-            only_use_database=only_use_database,
-            lookback=lookback,
-            parallel_process_count=parallel_process_count,
-            reschedule_measurements=reschedule_measurements,
+            detector_database,
+            database_path,
+            only_use_database,
+            lookback,
+            parallel_process_count,
         )
+        self._annotate_observables(k)
+
         annotations = self._get_annotation(k)
         assert annotations.qubit_map is not None
-
-        if qubit_lister is None:
-            qubit_lister = QubitLister(k)
 
         circuit = stim.Circuit()
         yield circuit  # Yield empty circuit to breakpoint after annotations generation
 
         yield annotations.qubit_map.to_circuit()
-        yield from self._root.generate_circuit_stream(k, annotations.qubit_map, qubit_lister)
+        yield from self._root.generate_circuit_stream(k, annotations.qubit_map)
 
     def _get_annotation(self, k: int) -> LayerTreeAnnotations:
         return self._annotations.setdefault(k, LayerTreeAnnotations())
