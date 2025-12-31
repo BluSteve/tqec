@@ -75,15 +75,15 @@ def memory(n: int, t: int) -> LayerTree:
 
 
 if __name__ == "__main__":
-    with open("results.csv", "w", newline="") as csvfile:
+    with open("results.csv", "a", newline="") as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(["n", "k", "duration1", "duration2"])
+        # writer.writerow(["n", "k", "duration1", "duration2"])
 
-        for x in range(3, 8):
+        for x in range(3, 10):
             lt = memory(x, 3)
 
-            for k in range(1, 6):
-                citer = lt.generate_circuit(k)
+            for k in range(6, 8):
+                citer = lt.generate_circuit_stream(k)
                 master_circuit = stim.Circuit()
 
                 start = time()

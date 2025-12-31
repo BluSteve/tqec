@@ -264,6 +264,125 @@ class LayerTree:
         only_use_database: bool = False,
         lookback: int = 2,
         reschedule_measurements: bool = True,
+    ) -> stim.Circuit:
+        """Generate the quantum circuit representing ``self``.
+
+        This method first annotates the tree according to the provided arguments
+        and then use these annotations to generate the final quantum circuit.
+
+        Args:
+            k: scaling factor.
+            include_qubit_coords: whether to include ``QUBIT_COORDS`` annotations
+                in the returned quantum circuit or not. Default to ``True``.
+            manhattan_radius: Parameter for the automatic computation of detectors.
+                Should be large enough so that flows canceling each other to
+                form a detector are strictly contained in plaquettes that are at
+                most at a distance of ``manhattan_radius`` from the central
+                plaquette. Detector computation runtime grows with this parameter,
+                so you should try to keep it to its minimum. A value too low might
+                produce invalid detectors.
+            detector_database: an instance to retrieve from / store in detectors
+                that are computed as part of the circuit generation. If not given,
+                the detectors are retrieved from/stored in the provided
+                ``database_path``.
+            database_path: specify where to save to after the calculation.
+                This defaults to :data:`.DEFAULT_DETECTOR_DATABASE_PATH` if
+                not specified. If detector_database is not passed in, the code attempts to
+                retrieve the database from this location.
+            do_not_use_database: if ``True``, even the default database will not be used.
+            only_use_database: if ``True``, only detectors from the database
+                will be used. An error will be raised if a situation that is not
+                registered in the database is encountered.
+            lookback: number of QEC rounds to consider to try to find detectors.
+                Including more rounds increases computation time.
+            reschedule_measurements: whether to reschedule measurements in a ``LayoutLayer``
+                to be in the same moment. Since each plaquette may have its own measurement
+                schedule, setting this may be necessary for hardware that requires
+                measurements to be synchronous.
+
+        Returns:
+            a ``stim.Circuit`` instance implementing the computation described
+            by ``self``.
+
+        """
+        # First, before we start any computations, decide which detector database to use.
+        if isinstance(database_path, str):
+            database_path = Path(database_path)
+        # We need to know for later if the user explicitly provided a database or
+        # not to decide if we should warn or raise.
+        user_defined = (
+            detector_database is not None or database_path != DEFAULT_DETECTOR_DATABASE_PATH
+        )
+        # If the user has passed a database in, use that, otherwise:
+        if detector_database is None:  # Nothing passed in,
+            if database_path.exists():  # look for an existing database at the path.
+                detector_database = DetectorDatabase.from_file(database_path)
+            else:  # if there is no existing database, create one.
+                detector_database = DetectorDatabase()
+        # If do_not_use_database is True, override the above code and reset the database to None
+        if do_not_use_database:
+            detector_database = None
+        if detector_database is not None:
+            loaded_version = detector_database.version
+            current_version = CURRENT_DATABASE_VERSION
+            if loaded_version != current_version:
+                if user_defined:
+                    raise TQECError(
+                        f"The detector database on disk you have specified is incompatible with"
+                        f" the version in the TQEC code you are running. The version of the disk"
+                        f" database is {loaded_version}, while the version in the TQEC code is "
+                        f"{current_version}."
+                    )
+                else:  # ie using the default
+                    warnings.warn(
+                        f"The default detector database that you have saved on your system is out "
+                        f"of date (version {loaded_version}). The version in the TQEC code you are "
+                        f"running is newer (version {current_version}). The database will be "
+                        "regenerated.",
+                        TQECWarning,
+                    )
+                    detector_database = DetectorDatabase()
+
+        # Enable parallel processing only if the detector database is empty or None,
+        # as current parallelization is effective only in this case.
+        # If we later support efficient parallelism with a populated database,
+        # we will expose the parallel_count parameter to users.
+        parallel_process_count = (
+            cpu_count() // 2 + 1
+            if (detector_database is None or len(detector_database) == 0)
+            else 1
+        )
+
+        self._generate_annotations(
+            k,
+            manhattan_radius,
+            detector_database=detector_database,
+            database_path=database_path,
+            only_use_database=only_use_database,
+            lookback=lookback,
+            parallel_process_count=parallel_process_count,
+            reschedule_measurements=reschedule_measurements,
+        )
+        annotations = self._get_annotation(k)
+        assert annotations.qubit_map is not None
+
+        circuit = stim.Circuit()
+        if include_qubit_coords:
+            circuit += annotations.qubit_map.to_circuit()
+        circuit += self._root.generate_circuit(k, annotations.qubit_map)
+        return circuit
+
+    def generate_circuit_stream(
+        self,
+        k: int,
+        include_qubit_coords: bool = True,
+        manhattan_radius: int = 2,
+        detector_database: DetectorDatabase | None = None,
+        database_path: str | Path = DEFAULT_DETECTOR_DATABASE_PATH,
+        do_not_use_database: bool = False,
+        only_use_database: bool = False,
+        lookback: int = 2,
+        reschedule_measurements: bool = True,
     ) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing ``self``.
 
@@ -367,13 +486,10 @@ class LayerTree:
         assert annotations.qubit_map is not None
 
         circuit = stim.Circuit()
-        yield circuit  # yield empty circuit to breakpoint after annotations generation
-
-        # if include_qubit_coords:
-        #     circuit += annotations.qubit_map.to_circuit() # I think this adds detector annotations
+        yield circuit  # Yield empty circuit to breakpoint after annotations generation
 
         yield annotations.qubit_map.to_circuit()
-        yield from self._root.generate_circuit(k, annotations.qubit_map)
+        yield from self._root.generate_circuit_stream(k, annotations.qubit_map)
 
     def _get_annotation(self, k: int) -> LayerTreeAnnotations:
         return self._annotations.setdefault(k, LayerTreeAnnotations())

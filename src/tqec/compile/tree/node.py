@@ -141,6 +141,92 @@ class LayerNode:
         k: int,
         global_qubit_map: QubitMap,
         add_polygons: bool = False,
+    ) -> list[stim.Circuit | list[Polygon]]:
+        """Generate the circuits and polygons for each nodes in the subtree rooted at ``self``.
+
+        Args:
+            k: scaling parameter.
+            global_qubit_map: qubit map that should be used to generate the
+                quantum circuit. Qubits from the returned quantum circuit will
+                adhere to the provided qubit map.
+            add_polygons: if ``True``, polygon objects for visualization in Crumble
+                will be added to the returned list.
+
+        Returns:
+            a list of ``stim.Circuit`` and/or ``list[Polygon]`` objects.
+            Each ``stim.Circuit`` represents a quantum circuit of a leaf node in
+            the tree. Each polygon list represents the stabilizer configuration
+            for the corresponding leaf node and will be placed right before the
+            corresponding circuit in the returned list. If two consecutive leaf
+            nodes have the same stabilizer configuration, only the first polygons
+            will be kept.
+
+        """
+        if isinstance(self._layer, LayoutLayer):
+            annotations = self.get_annotations(k)
+            base_circuit = annotations.circuit
+            if base_circuit is None:
+                raise TQECError(
+                    "Cannot generate the final quantum circuit before annotating "
+                    "nodes with their individual circuits. Did you call "
+                    "LayerTree.annotate_circuits before?"
+                )
+            local_qubit_map = base_circuit.qubit_map
+            qubit_indices_mapping = {
+                local_qubit_map[q]: global_qubit_map[q] for q in local_qubit_map.qubits
+            }
+            mapped_circuit = base_circuit.map_qubit_indices(qubit_indices_mapping)
+            for annotation in annotations.detectors + annotations.observables:
+                mapped_circuit.append_annotation(annotation.to_instruction())
+            mapped_circuit.append_annotation(
+                stim.CircuitInstruction(
+                    "SHIFT_COORDS", [], StimCoordinates(0, 0, 1).to_stim_coordinates()
+                )
+            )
+            ret: list[stim.Circuit | list[Polygon]] = [
+                mapped_circuit.get_circuit(include_qubit_coords=False)
+            ]
+            if add_polygons:
+                ret.insert(0, annotations.polygons)
+
+            return ret
+
+        if isinstance(self._layer, SequencedLayers):
+            ret = []
+            for child, next_child in itertools.pairwise(self._children):
+                ret += child.generate_circuits_with_potential_polygons(
+                    k, global_qubit_map, add_polygons
+                )
+                if not next_child.is_repeated:
+                    assert isinstance(ret[-1], stim.Circuit)
+                    ret[-1].append("TICK", [], [])
+            ret += self._children[-1].generate_circuits_with_potential_polygons(
+                k, global_qubit_map, add_polygons
+            )
+            return ret
+
+        if isinstance(self._layer, RepeatedLayer):
+            body = self._children[0].generate_circuits_with_potential_polygons(
+                k, global_qubit_map, add_polygons=add_polygons
+            )
+            body_circuit = sum(
+                (i for i in body if isinstance(i, stim.Circuit)),
+                start=stim.Circuit(),
+            )
+            body_circuit.insert(0, stim.CircuitInstruction("TICK"))
+            ret = []
+            if add_polygons:
+                # only keep the first set of polygons
+                ret.append(body[0])
+            ret.append(body_circuit * self._layer.repetitions.integer_eval(k))
+            return ret
+        raise TQECError(f"Unknown layer type found: {type(self._layer).__name__}.")
+
+    def generate_circuits_with_potential_polygons_stream(
+        self,
+        k: int,
+        global_qubit_map: QubitMap,
+        add_polygons: bool = False,
     ) -> Iterator[stim.Circuit | list[Polygon]]:
         """Generate the circuits and polygons for each nodes in the subtree rooted at ``self``.
 
@@ -183,22 +269,19 @@ class LayerNode:
                     "SHIFT_COORDS", [], StimCoordinates(0, 0, 1).to_stim_coordinates()
                 )
             )
+
+            if add_polygons:
+                yield annotations.polygons
+
             yield mapped_circuit.get_circuit(include_qubit_coords=False)
-            # if add_polygons:
-            #     ret.insert(0, annotations.polygons)
 
         if isinstance(self._layer, SequencedLayers):
             for child, next_child in itertools.pairwise(self._children):
-                circ = child.generate_circuits_with_potential_polygons(
+                circ = child.generate_circuits_with_potential_polygons_stream(
                     k, global_qubit_map, add_polygons
                 )
 
-                # for each element in circ, we need to modify it
                 if not next_child.is_repeated:
-                    # print(type(circ))
-                    # assert isinstance(circ, stim.Circuit)
-                    # circ.append("TICK", [], [])
-
                     tick = stim.Circuit()
                     tick.append("TICK", [], [])
                     circ = itertools.chain(
@@ -207,12 +290,12 @@ class LayerNode:
 
                 yield from circ
 
-            yield from self._children[-1].generate_circuits_with_potential_polygons(
+            yield from self._children[-1].generate_circuits_with_potential_polygons_stream(
                 k, global_qubit_map, add_polygons
             )
 
         if isinstance(self._layer, RepeatedLayer):
-            body = self._children[0].generate_circuits_with_potential_polygons(
+            body = self._children[0].generate_circuits_with_potential_polygons_stream(
                 k, global_qubit_map, add_polygons=add_polygons
             )
             body_circuit = sum(
@@ -221,19 +304,12 @@ class LayerNode:
             )
             body_circuit.insert(0, stim.CircuitInstruction("TICK"))
 
-            # TODO add_polygons not supported
-            """
-            ret = []
             if add_polygons:
-                # only keep the first set of polygons
-                ret.append(body[0])
-            """
+                yield from body  # only keep the first set of polygons
 
             yield body_circuit * self._layer.repetitions.integer_eval(k)
 
-        # raise TQECError(f"Unknown layer type found: {type(self._layer).__name__}.")
-
-    def generate_circuit(self, k: int, global_qubit_map: QubitMap) -> Iterator[stim.Circuit]:
+    def generate_circuit(self, k: int, global_qubit_map: QubitMap) -> stim.Circuit:
         """Generate the quantum circuit representing the node.
 
         Args:
@@ -250,10 +326,28 @@ class LayerNode:
         circuits = self.generate_circuits_with_potential_polygons(
             k, global_qubit_map, add_polygons=False
         )
-        # ret = stim.Circuit()
-        # for circuit in circuits: # This is just a check to ensure no polygons.
-        #     assert isinstance(circuit, stim.Circuit)
-        #     ret += circuit
-        # return ret
+        ret = stim.Circuit()
+        for circuit in circuits:
+            assert isinstance(circuit, stim.Circuit)
+            ret += circuit
+        return ret
+
+    def generate_circuit_stream(self, k: int, global_qubit_map: QubitMap) -> Iterator[stim.Circuit]:
+        """Generate the quantum circuit representing the node.
+
+        Args:
+            k: scaling parameter.
+            global_qubit_map: qubit map that should be used to generate the
+                quantum circuit. Qubits from the returned quantum circuit will
+                adhere to the provided qubit map.
+
+        Returns:
+            a ``stim.Circuit`` instance representing ``self`` with the provided
+            ``global_qubit_map``.
+
+        """
+        circuits = self.generate_circuits_with_potential_polygons_stream(
+            k, global_qubit_map, add_polygons=False
+        )
 
         return circuits

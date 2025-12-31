@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import stim
 from typing_extensions import TypeVarTuple, Unpack
 
 from tqec.compile.compile import _DEFAULT_BLOCK_REPETITIONS, compile_block_graph
@@ -91,6 +92,15 @@ def generate_circuit_and_assert(
                 f.write(svg_text)
 
     circuit = layer_tree.generate_circuit(k)
+
+    circuit_stream = layer_tree.generate_circuit_stream(k)
+    streamed_circuit = stim.Circuit()
+
+    for line in circuit_stream:
+        streamed_circuit += line
+
+    assert circuit == streamed_circuit
+
     noise_model = NoiseModel.uniform_depolarizing(0.001)
     noisy_circuit = noise_model.noisy_circuit(circuit)
     # layers svg with observable annotations
