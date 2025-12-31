@@ -1,3 +1,4 @@
+import csv
 import random
 from time import time
 
@@ -13,15 +14,15 @@ from tqec.utils.position import Position3D
 def memory(n: int, t: int) -> LayerTree:
     graph = BlockGraph()
 
-    c1 = "ZXX"
-    c2 = "ZXZ"
+    # cd = ['ZXX', 'ZXZ', 'XZX', 'XZZ']
+    cd = ["ZXX", "ZXZ"]
 
     r = random.Random(100)
 
     # Create n×n grid at each time slice
     for x in range(n):
         for y in range(n):
-            graph.add_cube(Position3D(x, y, 0), c1 if r.randint(0, 1) == 1 else c2)
+            graph.add_cube(Position3D(x, y, 0), r.choice(cd))
 
     # Add spatial connections within the first layer
     for x in range(n):
@@ -43,7 +44,7 @@ def memory(n: int, t: int) -> LayerTree:
         # Add all cubes in the n×n grid at time slice i
         for x in range(n):
             for y in range(n):
-                graph.add_cube(Position3D(x, y, i), c1 if r.randint(0, 1) == 1 else c2)
+                graph.add_cube(Position3D(x, y, i), r.choice(cd))
                 # Add temporal pipe from previous time slice
                 try:
                     graph.add_pipe(Position3D(x, y, i - 1), Position3D(x, y, i))
@@ -68,37 +69,44 @@ def memory(n: int, t: int) -> LayerTree:
 
     graph.view_as_html("memory.html")
 
-    compiled_graph = compile_block_graph(graph)
+    compiled_graph = compile_block_graph(graph, observables=None)
 
     return compiled_graph.to_layer_tree()
 
 
 if __name__ == "__main__":
-    lt = memory(3, 5)
+    with open("results.csv", "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["n", "k", "duration1", "duration2"])
 
-    for k in range(1, 50, 1):
-        citer = lt.generate_circuit(k)
-        master_circuit = stim.Circuit()
+        for x in range(3, 8):
+            lt = memory(x, 3)
 
-        start = time()
+            for k in range(1, 6):
+                citer = lt.generate_circuit(k)
+                master_circuit = stim.Circuit()
 
-        next(citer)  # annotations generation finish here
+                start = time()
 
-        end = time()
+                next(citer)  # annotations generation finish here
 
-        duration1 = end - start
+                end = time()
 
-        start = time()
+                duration1 = end - start
 
-        i = 0
-        for circ in citer:
-            master_circuit += circ
-            # print(circ)
-            # print('----------------------------')
-            i += 1
-            if i == 10:
-                break
+                start = time()
 
-        end = time()
-        duration2 = end - start
-        print(f"[{k=}] {duration1:.4f}s {duration2:.4f}s")
+                i = 0
+                for circ in citer:
+                    master_circuit += circ
+                    # print(circ)
+                    # print('----------------------------')
+                    i += 1
+                    # if i == 10:
+                    #     break
+
+                end = time()
+                duration2 = end - start
+                writer.writerow([x, k, duration1, duration2])
+
+                print(f"{x} {k} {duration1} {duration2}")
