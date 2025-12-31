@@ -5,7 +5,9 @@ from time import time
 import stim
 
 from tqec import BlockGraph
+from tqec.circuit.qubit_map import QubitMap
 from tqec.compile.compile import compile_block_graph
+from tqec.compile.tree.node import QubitLister
 from tqec.compile.tree.tree import LayerTree
 from tqec.utils import TQECError
 from tqec.utils.position import Position3D
@@ -67,49 +69,80 @@ def memory(n: int, t: int) -> LayerTree:
                     except TQECError:
                         pass
 
-    graph.view_as_html(f"memory_n{n}_t{t}.html")
+    # graph.view_as_html(f"memory_n{n}_t{t}.html")
 
-    compiled_graph = compile_block_graph(graph, observables=None)
+    compiled_graph = compile_block_graph(graph, observables="auto")
 
     return compiled_graph.to_layer_tree()
 
 
-if __name__ == "__main__":
+def benchmark():
     with open("results.csv", "a", newline="") as csvfile:
         writer = csv.writer(csvfile)
         # writer.writerow(["n", "k", "duration1", "duration2"])
 
-        for x in range(9, 10):
+        for x in range(3, 20):
+            start = time()
+
             lt = memory(x, 3)
 
-            for k in range(7, 8):
-                citer = lt.generate_circuit_stream(k)
-                master_circuit = stim.Circuit()
+            end = time()
 
-                start = time()
+            duration0 = end - start
 
-                next(citer)  # annotations generation finish here
+            print(f"{x} {duration0}")
 
-                end = time()
+            # for k in range(7, 8):
+            #     citer = lt.generate_circuit_stream(k)
+            #     master_circuit = stim.Circuit()
+            #
+            #     start = time()
+            #
+            #     next(citer)  # annotations generation finish here
+            #
+            #     end = time()
+            #
+            #     duration1 = end - start
+            #
+            #     start = time()
+            #
+            #     i = 0
+            #     for circ in citer:
+            #         master_circuit += circ
+            #         # print(circ)
+            #         # print('----------------------------')
+            #         i += 1
+            #         # if i == 10:
+            #         #     break
+            #
+            #     # with open(f"master_circuit_n{x}_k{k}.stim", "w") as f:
+            #     #     f.write(str(master_circuit))
+            #
+            #     end = time()
+            #     duration2 = end - start
+            #     # writer.writerow([x, k, duration1, duration2])
+            #
+            #     print(f"{x} {k} {duration0} {duration1} {duration2}")
 
-                duration1 = end - start
 
-                start = time()
+if __name__ == "__main__":
+    lt = memory(5, 5)
 
-                i = 0
-                for circ in citer:
-                    master_circuit += circ
-                    # print(circ)
-                    # print('----------------------------')
-                    i += 1
-                    # if i == 10:
-                    #     break
+    k = 2
+    qubit_lister = QubitLister(k)
+    citer = lt.generate_circuit_stream(k, qubit_lister=qubit_lister)
 
-                with open(f"master_circuit_n{x}_k{k}.stim", "w") as f:
-                    f.write(str(master_circuit))
+    master_circuit = stim.Circuit()
+    i = 0
+    for circ in citer:
+        print(i)
+        i += 1
+        master_circuit += circ
 
-                end = time()
-                duration2 = end - start
-                # writer.writerow([x, k, duration1, duration2])
+    qubit_map = QubitMap.from_qubits(sorted(qubit_lister.seen_qubits))
 
-                print(f"{x} {k} {duration1} {duration2}")
+    circuit = lt.generate_circuit(k)
+
+    print(circuit == master_circuit)
+
+    print(lt)

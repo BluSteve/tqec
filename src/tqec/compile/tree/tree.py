@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import stim
-from typing_extensions import override
 
 from tqec.circuit.qubit import GridQubit
 from tqec.circuit.qubit_map import QubitMap
@@ -20,38 +19,11 @@ from tqec.compile.tree.annotators.circuit import AnnotateCircuitOnLayerNode
 from tqec.compile.tree.annotators.detectors import AnnotateDetectorsOnLayerNode
 from tqec.compile.tree.annotators.observables import annotate_observable
 from tqec.compile.tree.annotators.polygons import AnnotatePolygonOnLayerNode
-from tqec.compile.tree.node import LayerNode, NodeWalker
+from tqec.compile.tree.node import LayerNode, QubitLister
 from tqec.post_processing.shift import shift_to_only_positive
 from tqec.utils.exceptions import TQECError, TQECWarning
 from tqec.utils.paths import DEFAULT_DETECTOR_DATABASE_PATH
 from tqec.visualisation.computation.tree import LayerVisualiser
-
-
-class QubitLister(NodeWalker):
-    def __init__(self, k: int):
-        """Keep in memory all the qubits used by the nodes explored.
-
-        Args:
-            k: scaling factor used to explore the quantum circuits.
-
-        """
-        super().__init__()
-        self._k = k
-        self._seen_qubits: set[GridQubit] = set()
-
-    @override
-    def visit_node(self, node: LayerNode) -> None:
-        if not node.is_leaf:
-            return
-        annotations = node.get_annotations(self._k)
-        if annotations.circuit is None:
-            raise TQECError("Cannot list qubits without the circuit annotation.")
-        self._seen_qubits |= annotations.circuit.qubits
-
-    @property
-    def seen_qubits(self) -> set[GridQubit]:
-        """Return all the qubits seen when exploring."""
-        return self._seen_qubits
 
 
 class LayerTree:
@@ -383,6 +355,7 @@ class LayerTree:
         only_use_database: bool = False,
         lookback: int = 2,
         reschedule_measurements: bool = True,
+        qubit_lister: QubitLister | None = None,
     ) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing ``self``.
 
@@ -485,11 +458,14 @@ class LayerTree:
         annotations = self._get_annotation(k)
         assert annotations.qubit_map is not None
 
+        if qubit_lister is None:
+            qubit_lister = QubitLister(k)
+
         circuit = stim.Circuit()
         yield circuit  # Yield empty circuit to breakpoint after annotations generation
 
         yield annotations.qubit_map.to_circuit()
-        yield from self._root.generate_circuit_stream(k, annotations.qubit_map)
+        yield from self._root.generate_circuit_stream(k, annotations.qubit_map, qubit_lister)
 
     def _get_annotation(self, k: int) -> LayerTreeAnnotations:
         return self._annotations.setdefault(k, LayerTreeAnnotations())
