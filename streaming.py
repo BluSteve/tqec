@@ -125,7 +125,7 @@ def benchmark():
 
 
 if __name__ == "__main__":
-    lt2 = memory(3, 3)
+    lt2 = memory(5, 5)
 
     k = 2
     circuit = lt2.generate_circuit(k)
@@ -134,7 +134,10 @@ if __name__ == "__main__":
 
     magic_qm = lt2._get_global_qubit_map(k)
 
-    lt = memory(3, 3)
+    with open("circuit.txt", "w") as f:
+        f.write(str(circuit))
+
+    lt = memory(5, 5)
     citer = lt.generate_circuit_stream(k, qubit_map=magic_qm)
 
     master_circuit = stim.Circuit()
@@ -143,6 +146,9 @@ if __name__ == "__main__":
         # print(i)
         i += 1
         master_circuit += circ
+
+    with open("master_circuit.txt", "w") as f:
+        f.write(str(master_circuit))
 
     print(circuit == master_circuit)
 

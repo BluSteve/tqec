@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, TypeGuard, override
+from typing import Any, TypeGuard, override, Dict
 
 import stim
 
@@ -18,6 +18,8 @@ from tqec.compile.blocks.layers.composed.base import BaseComposedLayer
 from tqec.compile.blocks.layers.composed.repeated import RepeatedLayer
 from tqec.compile.blocks.layers.composed.sequenced import SequencedLayers
 from tqec.compile.detectors import DetectorDatabase, compute_detectors_for_fixed_radius
+from tqec.compile.observables.abstract_observable import AbstractObservable
+from tqec.compile.observables.builder import ObservableComponent, ObservableBuilder, get_observable_with_measurement_records
 from tqec.compile.tree.annotations import LayerNodeAnnotations, Polygon, DetectorAnnotation
 from tqec.compile.tree.annotators.detectors import LookbackStack
 from tqec.utils.coordinates import StimCoordinates
@@ -258,7 +260,11 @@ class LayerNode:
         k: int,
         global_qubit_map: QubitMap,
         detectors_walker: AnnotateDetectorsOnLayerNode,
+        subtree_to_z: Dict[LayerNode, int], # todo maybe this doesn't have to be passed down so many layers
+        abstract_observables,
+        observable_builder,
         add_polygons: bool = False,
+        leaf_dict: Dict | None = None,
     ) -> Iterator[stim.Circuit | list[Polygon]]:
         """Generate the circuits and polygons for each nodes in the subtree rooted at ``self``.
 
@@ -280,11 +286,10 @@ class LayerNode:
             will be kept.
 
         """
-        print('layernode: ' + str(id(self)))
-
         if isinstance(self._layer, LayoutLayer):
             annotations = self.get_annotations(k)
 
+            # circuit
             base_circuit = self._layer.to_circuit(
                 k, reschedule_measurements=True
             )  # todo pass reschedule_measurements into this function
@@ -294,10 +299,18 @@ class LayerNode:
                     "nodes with their individual circuits. Did you call "
                     "LayerTree.annotate_circuits before?"
                 )
-
             annotations.circuit = base_circuit
+
+            # detectors
             detectors_walker.enter_node(self)
             detectors_walker.visit_node(self)
+
+            # observables
+            if leaf_dict is not None:
+                fns = leaf_dict[self]
+                if fns is not None:
+                    for fn in fns:
+                        fn(self)
 
             local_qubit_map = base_circuit.qubit_map
             qubit_indices_mapping = {
@@ -318,9 +331,53 @@ class LayerNode:
             yield mapped_circuit.get_circuit(include_qubit_coords=False)
 
         if isinstance(self._layer, SequencedLayers):
+            leaf_dict = {}
+
+            if self in subtree_to_z:
+                z = subtree_to_z[self]
+                leaves = _get_ordered_leaves(self)
+
+                for obs_idx, observable in enumerate(abstract_observables):
+                    obs_slice = observable.slice_at_z(z)
+
+                    # Python is an awful language
+                    def ao0(leaf: LayerNode, obs_slice=obs_slice, k=k,
+                            obs_idx=obs_idx, observable_builder=observable_builder):
+                        _annotate_observable_at_node(leaf, obs_slice, k, obs_idx, observable_builder,
+                                                     ObservableComponent.BOTTOM_STABILIZERS)
+
+                    if leaves[0] not in leaf_dict:
+                        leaf_dict[leaves[0]] = []
+                    leaf_dict[leaves[0]].append(ao0)
+
+                    readout_layer = leaves[-1]
+                    if obs_slice.temporal_hadamard_pipes:
+                        readout_layer = leaves[-2]
+
+                        def ao1(leaf: LayerNode, obs_slice=obs_slice, k=k,
+                            obs_idx=obs_idx, observable_builder=observable_builder):
+                            _annotate_observable_at_node(leaf, obs_slice, k, obs_idx, observable_builder,
+                                                         ObservableComponent.REALIGNMENT)
+
+                        if leaves[-1] not in leaf_dict:
+                            leaf_dict[leaves[-1]] = []
+                        leaf_dict[leaves[-1]].append(ao1)
+
+                    def ao2(leaf: LayerNode, obs_slice=obs_slice, k=k,
+                            obs_idx=obs_idx, observable_builder=observable_builder):
+                        _annotate_observable_at_node(leaf, obs_slice, k, obs_idx, observable_builder,
+                                                     ObservableComponent.TOP_READOUTS)
+
+                    if readout_layer not in leaf_dict:
+                        leaf_dict[readout_layer] = []
+                    leaf_dict[readout_layer].append(ao2)
+
+
             for child, next_child in itertools.pairwise(self._children):
                 circ = child.generate_circuits_with_potential_polygons_stream(
-                    k, global_qubit_map, detectors_walker, add_polygons
+                    k, global_qubit_map, detectors_walker, subtree_to_z,
+                    abstract_observables, observable_builder, add_polygons,
+                    leaf_dict=leaf_dict
                 )
 
                 if not next_child.is_repeated:
@@ -333,14 +390,17 @@ class LayerNode:
                 yield from circ
 
             yield from self._children[-1].generate_circuits_with_potential_polygons_stream(
-                k, global_qubit_map, detectors_walker, add_polygons
+                k, global_qubit_map, detectors_walker, subtree_to_z,
+                abstract_observables, observable_builder, add_polygons,
+                leaf_dict=leaf_dict
             )
 
         if isinstance(self._layer, RepeatedLayer):
             detectors_walker.enter_node(self)
 
             body = self._children[0].generate_circuits_with_potential_polygons_stream(
-                k, global_qubit_map, detectors_walker, add_polygons=add_polygons
+                k, global_qubit_map, detectors_walker, subtree_to_z,
+                abstract_observables, observable_builder, add_polygons=add_polygons
             )
             body_circuit = sum(
                 (i for i in body if isinstance(i, stim.Circuit)),
@@ -378,7 +438,11 @@ class LayerNode:
             ret += circuit
         return ret
 
-    def generate_circuit_stream(self, k: int, global_qubit_map: QubitMap, detectors_walker: AnnotateDetectorsOnLayerNode) -> Iterator[stim.Circuit]:
+    def generate_circuit_stream(self, k: int, global_qubit_map: QubitMap,
+                                detectors_walker: AnnotateDetectorsOnLayerNode,
+                                subtree_to_z: Dict[LayerNode, int],
+                                abstract_observables,
+                                observable_builder) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing the node.
 
         Args:
@@ -393,7 +457,8 @@ class LayerNode:
 
         """
         circuits = self.generate_circuits_with_potential_polygons_stream(
-            k, global_qubit_map, detectors_walker, add_polygons=False
+            k, global_qubit_map, detectors_walker, subtree_to_z,
+            abstract_observables, observable_builder, add_polygons=False
         )
 
         return circuits
@@ -454,8 +519,6 @@ class AnnotateDetectorsOnLayerNode(NodeWalker):
 
     @override
     def visit_node(self, node: LayerNode) -> None:
-        print('detector: ' + str(id(node)))
-
         if not isinstance(node._layer, LayoutLayer):
             return
         annotations = node.get_annotations(self._k)
@@ -501,3 +564,29 @@ class AnnotateDetectorsOnLayerNode(NodeWalker):
         repetitions = node.repetitions
         assert repetitions is not None
         self._lookback_stack.close_repeat_block(repetitions.integer_eval(self._k))
+
+def _get_ordered_leaves(root: LayerNode) -> list[LayerNode]:
+    """Return the leaves of the tree in time order."""
+    if root.is_leaf:
+        return [root]
+    return [n for child in root.children for n in _get_ordered_leaves(child)]
+
+def _annotate_observable_at_node(
+    node: LayerNode,
+    obs_slice: AbstractObservable,
+    k: int,
+    observable_index: int,
+    observable_builder: ObservableBuilder,
+    component: ObservableComponent,
+) -> None:
+    circuit = node.get_annotations(k).circuit
+    assert circuit is not None
+    measurement_record = MeasurementRecordsMap.from_scheduled_circuit(circuit)
+    assert isinstance(node._layer, LayoutLayer)
+    template, _ = node._layer.to_template_and_plaquettes()
+    obs_qubits = observable_builder.build(k, template, obs_slice, component)
+    if obs_qubits:
+        obs_annotation = get_observable_with_measurement_records(
+            obs_qubits, measurement_record, observable_index
+        )
+        node.get_annotations(k).observables.append(obs_annotation)

@@ -13,10 +13,10 @@ from tqec.circuit.qubit_map import QubitMap
 from tqec.compile.blocks.layers.composed.sequenced import SequencedLayers
 from tqec.compile.detectors.database import CURRENT_DATABASE_VERSION, DetectorDatabase
 from tqec.compile.observables.abstract_observable import AbstractObservable
-from tqec.compile.observables.builder import ObservableBuilder
+from tqec.compile.observables.builder import ObservableBuilder, ObservableComponent
 from tqec.compile.tree.annotations import LayerTreeAnnotations, Polygon
 from tqec.compile.tree.annotators.circuit import AnnotateCircuitOnLayerNode
-from tqec.compile.tree.annotators.observables import annotate_observable
+from tqec.compile.tree.annotators.observables import annotate_observable, _annotate_observable_at_node
 from tqec.compile.tree.annotators.polygons import AnnotatePolygonOnLayerNode
 from tqec.compile.tree.node import LayerNode, QubitLister, AnnotateDetectorsOnLayerNode
 from tqec.post_processing.shift import shift_to_only_positive
@@ -455,6 +455,9 @@ class LayerTree:
             parallel_process_count,
         )
 
+        # self._annotate_circuits(k, reschedule_measurements=reschedule_measurements)
+        # self._annotate_observables(k)
+
         annotations = self._get_annotation(k)
         assert annotations.qubit_map is not None
 
@@ -462,7 +465,11 @@ class LayerTree:
         yield circuit  # Yield empty circuit to breakpoint after annotations generation
 
         yield annotations.qubit_map.to_circuit()
-        yield from self._root.generate_circuit_stream(k, annotations.qubit_map, detectors_walker)
+
+        subtree_to_z = {subtree_root : z for (z, subtree_root) in enumerate(self._root.children)}
+
+        yield from self._root.generate_circuit_stream(k, annotations.qubit_map, detectors_walker,
+                                                      subtree_to_z, self._abstract_observables,self._observable_builder)
 
     def _get_annotation(self, k: int) -> LayerTreeAnnotations:
         return self._annotations.setdefault(k, LayerTreeAnnotations())
