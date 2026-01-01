@@ -455,9 +455,6 @@ class LayerTree:
             parallel_process_count,
         )
 
-        # self._annotate_circuits(k, reschedule_measurements=reschedule_measurements)
-        # self._annotate_observables(k)
-
         annotations = self._get_annotation(k)
         assert annotations.qubit_map is not None
 

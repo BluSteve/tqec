@@ -128,7 +128,12 @@ if __name__ == "__main__":
     lt2 = memory(5, 5)
 
     k = 2
+
+    start = time()
     circuit = lt2.generate_circuit(k)
+    end = time()
+
+    print(f"Single circuit generation time: {end - start}\n\n")
 
     print('starting for real\n\n')
 
@@ -140,12 +145,17 @@ if __name__ == "__main__":
     lt = memory(5, 5)
     citer = lt.generate_circuit_stream(k, qubit_map=magic_qm)
 
+    start = time()
     master_circuit = stim.Circuit()
     i = 0
     for circ in citer:
-        # print(i)
+        print(f"Adding circuit {i}")
+        print(f"Time elapsed: {time() - start} seconds")
         i += 1
         master_circuit += circ
+
+    end = time()
+    print(f"Streamed circuit generation time: {end - start}\n\n")
 
     with open("master_circuit.txt", "w") as f:
         f.write(str(master_circuit))
