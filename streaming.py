@@ -125,7 +125,9 @@ def benchmark():
 
 
 if __name__ == "__main__":
-    lt2 = memory(5, 5)
+    n = 5
+    t = 10
+    lt2 = memory(n, t)
 
     k = 2
 
@@ -142,15 +144,21 @@ if __name__ == "__main__":
     with open("circuit.txt", "w") as f:
         f.write(str(circuit))
 
-    lt = memory(5, 5)
+    lt = memory(n, t)
+
+    start = time()
     citer = lt.generate_circuit_stream(k, qubit_map=magic_qm)
+    end = time()
+    print(f"Streamed annotations generation time: {end - start}\n\n")
 
     start = time()
     master_circuit = stim.Circuit()
     i = 0
+
+    last = time()
     for circ in citer:
-        print(f"Adding circuit {i}")
-        print(f"Time elapsed: {time() - start} seconds")
+        print(f"{i}, {time() - last}, {circ.__str__()[:20].replace('\n', ' ')}")
+        last = time()
         i += 1
         master_circuit += circ
 
