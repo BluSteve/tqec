@@ -6,6 +6,7 @@ from typing import Any, TypeGuard, override
 
 import stim
 
+from tqec.circuit.measurement_map import MeasurementRecordsMap
 from tqec.circuit.qubit import GridQubit
 from tqec.circuit.qubit_map import QubitMap
 from tqec.circuit.schedule.circuit import ScheduledCircuit
@@ -16,7 +17,9 @@ from tqec.compile.blocks.layers.atomic.raw import RawCircuitLayer
 from tqec.compile.blocks.layers.composed.base import BaseComposedLayer
 from tqec.compile.blocks.layers.composed.repeated import RepeatedLayer
 from tqec.compile.blocks.layers.composed.sequenced import SequencedLayers
-from tqec.compile.tree.annotations import LayerNodeAnnotations, Polygon
+from tqec.compile.detectors import DetectorDatabase, compute_detectors_for_fixed_radius
+from tqec.compile.tree.annotations import LayerNodeAnnotations, Polygon, DetectorAnnotation
+from tqec.compile.tree.annotators.detectors import LookbackStack
 from tqec.utils.coordinates import StimCoordinates
 from tqec.utils.exceptions import TQECError
 from tqec.utils.scale import LinearFunction
@@ -43,7 +46,7 @@ class NodeWalker:
         pass
 
 
-class QubitLister(NodeWalker):
+class QubitLister(NodeWalker): # todo move this back
     def __init__(self, k: int):
         """Keep in memory all the qubits used by the nodes explored.
 
@@ -254,6 +257,7 @@ class LayerNode:
         self,
         k: int,
         global_qubit_map: QubitMap,
+        detectors_walker: AnnotateDetectorsOnLayerNode,
         add_polygons: bool = False,
     ) -> Iterator[stim.Circuit | list[Polygon]]:
         """Generate the circuits and polygons for each nodes in the subtree rooted at ``self``.
@@ -276,8 +280,11 @@ class LayerNode:
             will be kept.
 
         """
+        print('layernode: ' + str(id(self)))
+
         if isinstance(self._layer, LayoutLayer):
             annotations = self.get_annotations(k)
+
             base_circuit = self._layer.to_circuit(
                 k, reschedule_measurements=True
             )  # todo pass reschedule_measurements into this function
@@ -287,6 +294,11 @@ class LayerNode:
                     "nodes with their individual circuits. Did you call "
                     "LayerTree.annotate_circuits before?"
                 )
+
+            annotations.circuit = base_circuit
+            detectors_walker.enter_node(self)
+            detectors_walker.visit_node(self)
+
             local_qubit_map = base_circuit.qubit_map
             qubit_indices_mapping = {
                 local_qubit_map[q]: global_qubit_map[q] for q in local_qubit_map.qubits
@@ -308,7 +320,7 @@ class LayerNode:
         if isinstance(self._layer, SequencedLayers):
             for child, next_child in itertools.pairwise(self._children):
                 circ = child.generate_circuits_with_potential_polygons_stream(
-                    k, global_qubit_map, add_polygons
+                    k, global_qubit_map, detectors_walker, add_polygons
                 )
 
                 if not next_child.is_repeated:
@@ -321,12 +333,14 @@ class LayerNode:
                 yield from circ
 
             yield from self._children[-1].generate_circuits_with_potential_polygons_stream(
-                k, global_qubit_map, add_polygons
+                k, global_qubit_map, detectors_walker, add_polygons
             )
 
         if isinstance(self._layer, RepeatedLayer):
+            detectors_walker.enter_node(self)
+
             body = self._children[0].generate_circuits_with_potential_polygons_stream(
-                k, global_qubit_map, add_polygons=add_polygons
+                k, global_qubit_map, detectors_walker, add_polygons=add_polygons
             )
             body_circuit = sum(
                 (i for i in body if isinstance(i, stim.Circuit)),
@@ -338,6 +352,8 @@ class LayerNode:
                 yield from body  # only keep the first set of polygons
 
             yield body_circuit * self._layer.repetitions.integer_eval(k)
+
+        detectors_walker.exit_node(self)
 
     def generate_circuit(self, k: int, global_qubit_map: QubitMap) -> stim.Circuit:
         """Generate the quantum circuit representing the node.
@@ -362,7 +378,7 @@ class LayerNode:
             ret += circuit
         return ret
 
-    def generate_circuit_stream(self, k: int, global_qubit_map: QubitMap) -> Iterator[stim.Circuit]:
+    def generate_circuit_stream(self, k: int, global_qubit_map: QubitMap, detectors_walker: AnnotateDetectorsOnLayerNode) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing the node.
 
         Args:
@@ -377,7 +393,111 @@ class LayerNode:
 
         """
         circuits = self.generate_circuits_with_potential_polygons_stream(
-            k, global_qubit_map, add_polygons=False
+            k, global_qubit_map, detectors_walker, add_polygons=False
         )
 
         return circuits
+
+
+class AnnotateDetectorsOnLayerNode(NodeWalker):
+    def __init__(
+        self,
+        k: int,
+        manhattan_radius: int = 2,
+        detector_database: DetectorDatabase | None = None,
+        only_use_database: bool = False,
+        lookback: int = 2,
+        parallel_process_count: int = 1,
+    ):
+        """Walker computing and annotating detectors on leaf nodes.
+
+        This class keeps track of the ``lookback`` previous leaf nodes seen and
+        uses them to automatically compute the detectors at all the leaf nodes
+        it encounters.
+
+        Args:
+            k: scaling factor.
+            manhattan_radius: Parameter for the automatic computation of detectors.
+                Should be large enough so that flows cancelling each other to
+                form a detector are strictly contained in plaquettes that are at
+                most at a distance of ``manhattan_radius`` from the central
+                plaquette. Detector computation runtime grows with this parameter,
+                so you should try to keep it to its minimum. A value too low might
+                produce invalid detectors.
+            detector_database: existing database of detectors that is used to
+                avoid computing detectors if the database already contains them.
+                Default to `None` which result in not using any kind of database
+                and unconditionally performing the detector computation.
+            only_use_database: if ``True``, only detectors from the database will be
+                used. An error will be raised if a situation that is not registered
+                in the database is encountered. Default to ``False``.
+            lookback: number of QEC rounds to consider to try to find detectors. Including more
+                rounds increases computation time.
+            parallel_process_count: number of processes to use for parallel processing.
+                1 for sequential processing, >1 for parallel processing using
+                ``parallel_process_count`` processes, and -1 for using all available
+                CPU cores. Default to 1.
+
+        """
+        if lookback < 1:
+            raise TQECError(
+                "Cannot compute detectors without any layer. The `lookback` "
+                f"parameter should be >= 1 but got {lookback}."
+            )
+        self._k = k
+        self._manhattan_radius = manhattan_radius
+        self._database = detector_database if detector_database is not None else DetectorDatabase()
+        self._only_use_database = only_use_database
+        self._lookback_size = lookback
+        self._lookback_stack = LookbackStack()
+        self._parallel_process_count = parallel_process_count
+
+    @override
+    def visit_node(self, node: LayerNode) -> None:
+        print('detector: ' + str(id(node)))
+
+        if not isinstance(node._layer, LayoutLayer):
+            return
+        annotations = node.get_annotations(self._k)
+        if annotations.circuit is None:
+            raise TQECError("Cannot compute detectors without the circuit annotation.")
+        self._lookback_stack.append(
+            *node._layer.to_template_and_plaquettes(),
+            MeasurementRecordsMap.from_scheduled_circuit(annotations.circuit),
+        )
+        templates, plaquettes, measurement_records = self._lookback_stack.lookback(
+            self._lookback_size
+        )
+
+        detectors = compute_detectors_for_fixed_radius(
+            templates,
+            self._k,
+            plaquettes,
+            self._manhattan_radius,
+            self._database,
+            self._only_use_database,
+            self._parallel_process_count,
+        )
+
+        for detector in detectors:
+            annotations.detectors.append(
+                DetectorAnnotation.from_detector(detector, measurement_records)
+            )
+
+    @override
+    def enter_node(self, node: LayerNode) -> None:
+        if node.is_repeated:
+            self._lookback_stack.enter_repeat_block()
+
+    @override
+    def exit_node(self, node: LayerNode) -> None:
+        if not node.is_repeated:
+            return
+        # Note: this is the place to perform checks. In particular, checking that
+        # detectors computed at the first repetition of the REPEAT block are also
+        # valid at any repetitions. This is a requirement for the REPEAT block to
+        # make sense, but that would be nice to include a check to avoid
+        # misleadingly include detectors that are incorrect sometimes.
+        repetitions = node.repetitions
+        assert repetitions is not None
+        self._lookback_stack.close_repeat_block(repetitions.integer_eval(self._k))

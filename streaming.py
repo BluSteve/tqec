@@ -6,6 +6,7 @@ import stim
 
 from tqec import BlockGraph
 from tqec.compile.compile import compile_block_graph
+from tqec.compile.tree.node import AnnotateDetectorsOnLayerNode
 from tqec.compile.tree.tree import LayerTree
 from tqec.utils import TQECError
 from tqec.utils.position import Position3D
@@ -129,6 +130,8 @@ if __name__ == "__main__":
     k = 2
     circuit = lt2.generate_circuit(k)
 
+    print('starting for real\n\n')
+
     magic_qm = lt2._get_global_qubit_map(k)
 
     lt = memory(3, 3)
@@ -137,7 +140,7 @@ if __name__ == "__main__":
     master_circuit = stim.Circuit()
     i = 0
     for circ in citer:
-        print(i)
+        # print(i)
         i += 1
         master_circuit += circ
 

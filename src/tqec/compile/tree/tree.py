@@ -16,10 +16,9 @@ from tqec.compile.observables.abstract_observable import AbstractObservable
 from tqec.compile.observables.builder import ObservableBuilder
 from tqec.compile.tree.annotations import LayerTreeAnnotations, Polygon
 from tqec.compile.tree.annotators.circuit import AnnotateCircuitOnLayerNode
-from tqec.compile.tree.annotators.detectors import AnnotateDetectorsOnLayerNode
 from tqec.compile.tree.annotators.observables import annotate_observable
 from tqec.compile.tree.annotators.polygons import AnnotatePolygonOnLayerNode
-from tqec.compile.tree.node import LayerNode, QubitLister
+from tqec.compile.tree.node import LayerNode, QubitLister, AnnotateDetectorsOnLayerNode
 from tqec.post_processing.shift import shift_to_only_positive
 from tqec.utils.exceptions import TQECError, TQECWarning
 from tqec.utils.paths import DEFAULT_DETECTOR_DATABASE_PATH
@@ -447,19 +446,14 @@ class LayerTree:
 
         self._get_annotation(k).qubit_map = qubit_map
 
-        # Else, perform all the needed computations.
-        self._annotate_circuits(k, reschedule_measurements=reschedule_measurements)
-        # This method will also update the detector_database and save it to disk at database_path.
-        self._annotate_detectors(
+        detectors_walker = AnnotateDetectorsOnLayerNode(
             k,
             manhattan_radius,
             detector_database,
-            database_path,
             only_use_database,
             lookback,
             parallel_process_count,
         )
-        self._annotate_observables(k)
 
         annotations = self._get_annotation(k)
         assert annotations.qubit_map is not None
@@ -468,7 +462,7 @@ class LayerTree:
         yield circuit  # Yield empty circuit to breakpoint after annotations generation
 
         yield annotations.qubit_map.to_circuit()
-        yield from self._root.generate_circuit_stream(k, annotations.qubit_map)
+        yield from self._root.generate_circuit_stream(k, annotations.qubit_map, detectors_walker)
 
     def _get_annotation(self, k: int) -> LayerTreeAnnotations:
         return self._annotations.setdefault(k, LayerTreeAnnotations())
