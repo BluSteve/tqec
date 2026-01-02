@@ -320,7 +320,7 @@ class LayerNode:
 
             # observables
             if leaf_dict is not None:
-                fns = leaf_dict[self]
+                fns = leaf_dict.get(self)
                 if fns is not None:
                     for fn in fns:
                         fn(self)
