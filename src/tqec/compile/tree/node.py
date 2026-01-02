@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, TypeGuard, override, Dict
+from time import time
 
 import stim
 
@@ -303,6 +304,7 @@ class LayerNode:
             annotations = self.get_annotations(k)
 
             # circuit
+            circuit_start = time()
             base_circuit = self._layer.to_circuit(
                 k, reschedule_measurements=reschedule_measurements
             )
@@ -313,17 +315,24 @@ class LayerNode:
                     "LayerTree.annotate_circuits before?"
                 )
             annotations.circuit = base_circuit
+            circuit_end = time()
 
             # detectors
+            detectors_start = time()
             detectors_walker.enter_node(self)
             detectors_walker.visit_node(self)
+            detectors_end = time()
 
             # observables
+            observables_start = time()
             if leaf_dict is not None:
                 fns = leaf_dict.get(self)
                 if fns is not None:
                     for fn in fns:
                         fn(self)
+            observables_end = time()
+
+            print(f"Circuit: {circuit_end - circuit_start:.6f}s, Detectors: {detectors_end - detectors_start:.6f}s, Observables: {observables_end - observables_start:.6f}s")
 
             local_qubit_map = base_circuit.qubit_map
             qubit_indices_mapping = {

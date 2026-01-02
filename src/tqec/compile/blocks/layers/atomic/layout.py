@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from functools import cached_property
+from time import time
 from typing import Final, TypeGuard
 
 from typing_extensions import override
@@ -224,8 +225,11 @@ class LayoutLayer(BaseLayer):
         """
         if reschedule_measurements:
             self.reschedule_measurements()
+
+        start = time()
         template, plaquettes = self.to_template_and_plaquettes()
         scheduled_circuit = generate_circuit(template, k, plaquettes)
+        print(f"Generated circuit in {time() - start:.3f} seconds.")
         # Shift the qubits of the returned scheduled circuit
         mincube, _ = self.bounds
         eshape = self.element_shape.to_shape_2d(k)

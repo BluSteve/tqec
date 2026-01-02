@@ -18,6 +18,8 @@ Note that these methods do not work with ``REPEAT`` instructions.
 
 from __future__ import annotations
 
+from time import time
+
 import numpy
 import numpy.typing as npt
 
@@ -114,6 +116,8 @@ def generate_circuit_from_instantiation(
 
     """
     # Collect all the used plaquette indices, removing 0 if present.
+
+    start = time()
     indices = numpy.unique(plaquette_array)
     if indices[0] == 0:
         indices = indices[1:]
@@ -159,6 +163,7 @@ def generate_circuit_from_instantiation(
     # that the input circuits are not mutated but rather copied. This allows us
     # to not deepcopy the circuits earlier in the function.
     all_scheduled_circuits, qubit_map = relabel_circuits_qubit_indices(all_scheduled_circuits)
+    print(f'generate_circuit_from_instantiation took {time() - start:.3f} seconds')
     return merge_scheduled_circuits(
         all_scheduled_circuits, qubit_map, additional_mergeable_instructions
     )
