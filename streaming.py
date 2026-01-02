@@ -2,8 +2,6 @@ import csv
 import random
 from time import time
 
-import stim
-
 from tqec import BlockGraph
 from tqec.circuit.qubit import GridQubit
 from tqec.circuit.qubit_map import QubitMap
@@ -91,7 +89,7 @@ def memory(nx: int, ny: int, t: int) -> LayerTree:
                     except TQECError:
                         pass
 
-    graph.view_as_html(f"memory_nx{nx}_ny{ny}_t{t}.html")
+    # graph.view_as_html(f"memory_nx{nx}_ny{ny}_t{t}.html")
 
     compiled_graph = compile_block_graph(graph, observables="auto")
 
@@ -150,25 +148,28 @@ def benchmark():
 if __name__ == "__main__":
     nx = 3
     ny = 4
-    t = 5
-    k = 1
+    t = 200
+    k = 3
 
-    lt2 = memory(nx,ny, t)
-
-    start = time()
-    circuit = lt2.generate_circuit(k)
-    end = time()
-
-    print(f"Single circuit generation time: {end - start}\n\n")
-
-    print('starting for real\n\n')
+    # lt2 = memory(nx,ny, t)
+    #
+    # start = time()
+    # circuit = lt2.generate_circuit(k)
+    # end = time()
+    #
+    # print(f"Single circuit generation time: {end - start}\n\n")
+    #
+    # with open("circuit.txt", "w") as f:
+    #     f.write(str(circuit))
+    #
+    # print('starting for real\n\n')
 
     magic_qm = generate_qubit_map(nx, ny, k)
 
-    with open("circuit.txt", "w") as f:
-        f.write(str(circuit))
-
-    lt = memory(nx,ny, t)
+    start = time()
+    lt = memory(nx, ny, t)
+    end = time()
+    print(f"Layer tree generation time: {end - start}\n\n")
 
     start = time()
     citer = lt.generate_circuit_stream(k, magic_qm)
@@ -176,22 +177,19 @@ if __name__ == "__main__":
     print(f"Streamed annotations generation time: {end - start}\n\n")
 
     start = time()
-    master_circuit = stim.Circuit()
     i = 0
 
     last = time()
-    for circ in citer:
-        print(f"{i}, {time() - last}, {circ.__str__()[:20].replace('\n', ' ')}")
-        last = time()
-        i += 1
-        master_circuit += circ
+    with open("master_circuit.txt", "w+") as f:
+        for circ in citer:
+            print(f"{i}, {time() - last}, {circ.__str__()[:20].replace('\n', ' ')}")
+            last = time()
+            i += 1
+            f.write(str(circ))
 
     end = time()
     print(f"Streamed circuit generation time: {end - start}\n\n")
 
-    with open("master_circuit.txt", "w") as f:
-        f.write(str(master_circuit))
-
-    print(circuit == master_circuit)
+    # print(circuit == master_circuit)
 
     print(lt)
