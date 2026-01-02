@@ -346,6 +346,7 @@ class LayerTree:
     def generate_circuit_stream(
         self,
         k: int,
+        qubit_map: QubitMap,
         include_qubit_coords: bool = True,
         manhattan_radius: int = 2,
         detector_database: DetectorDatabase | None = None,
@@ -354,7 +355,6 @@ class LayerTree:
         only_use_database: bool = False,
         lookback: int = 2,
         reschedule_measurements: bool = True,
-        qubit_map: QubitMap | None = None,
     ) -> Iterator[stim.Circuit]:
         """Generate the quantum circuit representing ``self``.
 
@@ -461,11 +461,13 @@ class LayerTree:
         circuit = stim.Circuit()
         yield circuit  # Yield empty circuit to breakpoint after annotations generation
 
-        yield annotations.qubit_map.to_circuit()
+        if include_qubit_coords:
+            yield annotations.qubit_map.to_circuit()
 
         subtree_to_z = {subtree_root : z for (z, subtree_root) in enumerate(self._root.children)}
 
-        yield from self._root.generate_circuit_stream(k, annotations.qubit_map, detectors_walker,
+        yield from self._root.generate_circuit_stream(k, annotations.qubit_map,
+                                                      reschedule_measurements, detectors_walker,
                                                       subtree_to_z, self._abstract_observables,self._observable_builder)
 
     def _get_annotation(self, k: int) -> LayerTreeAnnotations:

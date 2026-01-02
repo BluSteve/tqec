@@ -259,8 +259,9 @@ class LayerNode:
         self,
         k: int,
         global_qubit_map: QubitMap,
+        reschedule_measurements: bool,
         detectors_walker: AnnotateDetectorsOnLayerNode,
-        subtree_to_z: Dict[LayerNode, int], # todo maybe this doesn't have to be passed down so many layers
+        subtree_to_z: Dict[LayerNode, int], # Maybe this doesn't have to be passed down so many layers
         abstract_observables,
         observable_builder,
         add_polygons: bool = False,
@@ -291,8 +292,8 @@ class LayerNode:
 
             # circuit
             base_circuit = self._layer.to_circuit(
-                k, reschedule_measurements=True
-            )  # todo pass reschedule_measurements into this function
+                k, reschedule_measurements=reschedule_measurements
+            )
             if base_circuit is None:
                 raise TQECError(
                     "Cannot generate the final quantum circuit before annotating "
@@ -375,7 +376,7 @@ class LayerNode:
 
             for child, next_child in itertools.pairwise(self._children):
                 circ = child.generate_circuits_with_potential_polygons_stream(
-                    k, global_qubit_map, detectors_walker, subtree_to_z,
+                    k, global_qubit_map, reschedule_measurements, detectors_walker, subtree_to_z,
                     abstract_observables, observable_builder, add_polygons,
                     leaf_dict=leaf_dict
                 )
@@ -390,7 +391,7 @@ class LayerNode:
                 yield from circ
 
             yield from self._children[-1].generate_circuits_with_potential_polygons_stream(
-                k, global_qubit_map, detectors_walker, subtree_to_z,
+                k, global_qubit_map, reschedule_measurements, detectors_walker, subtree_to_z,
                 abstract_observables, observable_builder, add_polygons,
                 leaf_dict=leaf_dict
             )
@@ -399,7 +400,7 @@ class LayerNode:
             detectors_walker.enter_node(self)
 
             body = self._children[0].generate_circuits_with_potential_polygons_stream(
-                k, global_qubit_map, detectors_walker, subtree_to_z,
+                k, global_qubit_map, reschedule_measurements, detectors_walker, subtree_to_z,
                 abstract_observables, observable_builder, add_polygons=add_polygons
             )
             body_circuit = sum(
@@ -439,6 +440,7 @@ class LayerNode:
         return ret
 
     def generate_circuit_stream(self, k: int, global_qubit_map: QubitMap,
+                                reschedule_measurements: bool,
                                 detectors_walker: AnnotateDetectorsOnLayerNode,
                                 subtree_to_z: Dict[LayerNode, int],
                                 abstract_observables,
@@ -457,7 +459,7 @@ class LayerNode:
 
         """
         circuits = self.generate_circuits_with_potential_polygons_stream(
-            k, global_qubit_map, detectors_walker, subtree_to_z,
+            k, global_qubit_map, reschedule_measurements, detectors_walker, subtree_to_z,
             abstract_observables, observable_builder, add_polygons=False
         )
 

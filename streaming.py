@@ -147,7 +147,7 @@ if __name__ == "__main__":
     lt = memory(n, t)
 
     start = time()
-    citer = lt.generate_circuit_stream(k, qubit_map=magic_qm)
+    citer = lt.generate_circuit_stream(k, magic_qm)
     end = time()
     print(f"Streamed annotations generation time: {end - start}\n\n")
 
