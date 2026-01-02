@@ -5,14 +5,37 @@ from time import time
 import stim
 
 from tqec import BlockGraph
+from tqec.circuit.qubit import GridQubit
+from tqec.circuit.qubit_map import QubitMap
 from tqec.compile.compile import compile_block_graph
-from tqec.compile.tree.node import AnnotateDetectorsOnLayerNode
 from tqec.compile.tree.tree import LayerTree
 from tqec.utils import TQECError
 from tqec.utils.position import Position3D
 
 
-def memory(n: int, t: int) -> LayerTree:
+def generate_qubit_map(x, y, k):
+    d = 2 * k + 1
+    a = 2 * d
+
+    xa = a * x + 2 * (x - 1) + 1
+    ya = a * y + 2 * (y - 1) + 1
+
+    qubits: dict[int, GridQubit] = {}
+
+    i = 0
+    for b in range(xa):
+        for c in range(ya):
+            if (b + c) % 2 == 1:
+                continue
+            qubits[i] = GridQubit(b, c)
+            i += 1
+
+    qm = QubitMap(qubits)
+
+    return qm
+
+
+def memory(nx: int, ny: int, t: int) -> LayerTree:
     graph = BlockGraph()
 
     # cd = ['ZXX', 'ZXZ', 'XZX', 'XZZ']
@@ -21,21 +44,21 @@ def memory(n: int, t: int) -> LayerTree:
     r = random.Random(100)
 
     # Create n×n grid at each time slice
-    for x in range(n):
-        for y in range(n):
+    for x in range(nx):
+        for y in range(ny):
             graph.add_cube(Position3D(x, y, 0), r.choice(cd))
 
     # Add spatial connections within the first layer
-    for x in range(n):
-        for y in range(n):
+    for x in range(nx):
+        for y in range(ny):
             try:
-                if x < n - 1:
+                if x < nx - 1:
                     graph.add_pipe(Position3D(x, y, 0), Position3D(x + 1, y, 0))
             except TQECError:
                 pass
 
             try:
-                if y < n - 1:
+                if y < ny - 1:
                     graph.add_pipe(Position3D(x, y, 0), Position3D(x, y + 1, 0))
             except TQECError:
                 pass
@@ -43,8 +66,8 @@ def memory(n: int, t: int) -> LayerTree:
     # Add temporal layers and connections
     for i in range(1, t):
         # Add all cubes in the n×n grid at time slice i
-        for x in range(n):
-            for y in range(n):
+        for x in range(nx):
+            for y in range(ny):
                 graph.add_cube(Position3D(x, y, i), r.choice(cd))
                 # Add temporal pipe from previous time slice
                 try:
@@ -54,21 +77,21 @@ def memory(n: int, t: int) -> LayerTree:
 
         # Add spatial connections within this layer
         if i != t - 1:
-            for x in range(n):
-                for y in range(n):
+            for x in range(nx):
+                for y in range(ny):
                     try:
-                        if x < n - 1:
+                        if x < nx - 1:
                             graph.add_pipe(Position3D(x, y, i), Position3D(x + 1, y, i))
                     except TQECError:
                         pass
 
                     try:
-                        if y < n - 1:
+                        if y < ny - 1:
                             graph.add_pipe(Position3D(x, y, i), Position3D(x, y + 1, i))
                     except TQECError:
                         pass
 
-    # graph.view_as_html(f"memory_n{n}_t{t}.html")
+    graph.view_as_html(f"memory_nx{nx}_ny{ny}_t{t}.html")
 
     compiled_graph = compile_block_graph(graph, observables="auto")
 
@@ -125,11 +148,12 @@ def benchmark():
 
 
 if __name__ == "__main__":
-    n = 5
-    t = 10
-    lt2 = memory(n, t)
+    nx = 3
+    ny = 4
+    t = 5
+    k = 1
 
-    k = 2
+    lt2 = memory(nx,ny, t)
 
     start = time()
     circuit = lt2.generate_circuit(k)
@@ -139,12 +163,12 @@ if __name__ == "__main__":
 
     print('starting for real\n\n')
 
-    magic_qm = lt2._get_global_qubit_map(k)
+    magic_qm = generate_qubit_map(nx, ny, k)
 
     with open("circuit.txt", "w") as f:
         f.write(str(circuit))
 
-    lt = memory(n, t)
+    lt = memory(nx,ny, t)
 
     start = time()
     citer = lt.generate_circuit_stream(k, magic_qm)
