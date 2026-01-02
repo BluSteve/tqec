@@ -48,7 +48,7 @@ class NodeWalker:
         pass
 
 
-class QubitLister(NodeWalker): # todo move this back
+class QubitLister(NodeWalker):
     def __init__(self, k: int):
         """Keep in memory all the qubits used by the nodes explored.
 
@@ -274,11 +274,23 @@ class LayerNode:
             global_qubit_map: qubit map that should be used to generate the
                 quantum circuit. Qubits from the returned quantum circuit will
                 adhere to the provided qubit map.
+            reschedule_measurements: if ``True``, measurements will be rescheduled
+                to optimize circuit execution.
+            detectors_walker: walker instance used to compute and annotate detectors
+                on leaf nodes during circuit generation.
+            subtree_to_z: mapping from direct children of root to their z-coordinate values,
+                used for determining which abstract observables to apply at each node.
+            abstract_observables: collection of abstract observable definitions to be
+                annotated in the circuit.
+            observable_builder: builder instance used to construct observable annotations
+                from abstract observable definitions.
             add_polygons: if ``True``, polygon objects for visualization in Crumble
                 will be added to the returned list.
+            leaf_dict: optional dictionary mapping leaf nodes to lists of observable functions
+                that should be applied during node processing. Default to ``None``.
 
         Returns:
-            a list of ``stim.Circuit`` and/or ``list[Polygon]`` objects.
+            an iterator to ``stim.Circuit`` and/or ``list[Polygon]`` objects.
             Each ``stim.Circuit`` represents a quantum circuit of a leaf node in
             the tree. Each polygon list represents the stabilizer configuration
             for the corresponding leaf node and will be placed right before the
@@ -452,6 +464,16 @@ class LayerNode:
             global_qubit_map: qubit map that should be used to generate the
                 quantum circuit. Qubits from the returned quantum circuit will
                 adhere to the provided qubit map.
+            reschedule_measurements: if ``True``, measurements will be rescheduled
+                to optimize circuit execution.
+            detectors_walker: walker instance used to compute and annotate detectors
+                on leaf nodes during circuit generation.
+            subtree_to_z: mapping from direct children of root to their z-coordinate values,
+                used for determining which abstract observables to apply at each node.
+            abstract_observables: collection of abstract observable definitions to be
+                annotated in the circuit.
+            observable_builder: builder instance used to construct observable annotations
+                from abstract observable definitions.
 
         Returns:
             a ``stim.Circuit`` instance representing ``self`` with the provided

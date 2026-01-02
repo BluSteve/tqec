@@ -363,6 +363,7 @@ class LayerTree:
 
         Args:
             k: scaling factor.
+            qubit_map: the qubit map to use for the circuit generation.
             include_qubit_coords: whether to include ``QUBIT_COORDS`` annotations
                 in the returned quantum circuit or not. Default to ``True``.
             manhattan_radius: Parameter for the automatic computation of detectors.
