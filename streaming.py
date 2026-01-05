@@ -252,8 +252,12 @@ def block_graph_stream(graph: BlockGraph, k: int, qubit_map: QubitMap) -> Iterat
 
     j = 0
     for p in partitions:
-        compiled_p = compile_block_graph(p, observables=None)
+        start = time()
+        compiled_p = compile_block_graph(p, observables=None) # todo does not work with observables
         lt = compiled_p.to_layer_tree()
+        end = time()
+        print(f"\nPartition {j}/{len(partitions)} layer tree generation time (s): {end - start}")
+
         iter2 = lt.generate_circuit_stream(k, qubit_map)
 
         i = 0
@@ -274,17 +278,17 @@ def block_graph_stream(graph: BlockGraph, k: int, qubit_map: QubitMap) -> Iterat
 
 
 if __name__ == "__main__":
-    nx = 3
-    ny = 3
-    t = 100
-    k = 1
+    nx = 10
+    ny = 10
+    t = 1000
+    k = 2
 
     graph = _random_block_graph(nx, ny, t)
 
     # qmap = _generate_qubit_map(nx, ny, k)
     #
     # iter1 = (
-    #     compile_block_graph(graph, observables=None)
+    #     compile_block_graph(graph, observables='auto')
     #     .to_layer_tree()
     #     .generate_circuit_stream(k, qmap)
     # )
@@ -305,6 +309,8 @@ if __name__ == "__main__":
     #
     # with open("stim2.txt", "w+") as f:
     #     f.write(str(stim2))
+    #
+    # print(f'Stim circuits are the same: {stim1 == stim2}')
 
     benchmark_stream(nx, ny, t, k, compare_to_unstreamed=False, write_blockgraph_to_disk=False,
                      block_graph_streaming=True)
