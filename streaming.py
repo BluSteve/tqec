@@ -110,6 +110,42 @@ def _random_block_graph(nx: int, ny: int, t: int) -> BlockGraph:
     return graph
 
 
+def _partition_block_graph(block_graph: BlockGraph, z_per_partition: int) -> list[BlockGraph]:
+    """Partition a block graph into smaller block graphs.
+
+    Args:
+        block_graph: The original block graph to partition.
+        max_cubes_per_partition: Maximum number of cubes allowed in each partition.
+
+    Returns:
+        A list of partitioned block graphs.
+
+    """
+    partitions: list[BlockGraph] = []
+
+    # filter blockgraph by z
+    zlo = 0
+    zhi = z_per_partition - 1
+
+    max_z = block_graph.bounding_box_size()[2]
+    while zhi <= max_z:
+        cubes = set(filter(lambda cube: zlo <= cube.position.z <= zhi, block_graph.cubes))
+        pipes = list(filter(lambda pipe: pipe.u in cubes and pipe.v in cubes, block_graph.pipes))
+        graph_part = BlockGraph()
+        for cube in cubes:
+            graph_part.add_cube(cube.position, cube.kind)
+
+        for pipe in pipes:
+            graph_part.add_pipe(pipe.u.position, pipe.v.position, pipe.kind)
+
+        partitions.append(graph_part)
+
+        zlo += z_per_partition - 1
+        zhi += z_per_partition - 1  # overlap
+
+    return partitions
+
+
 def benchmark_stream(
     nx: int,
     ny: int,
@@ -209,7 +245,52 @@ def benchmark_stream(
 if __name__ == "__main__":
     nx = 3
     ny = 3
-    t = 10
-    k = 1
+    t = 9
+    k = 2
 
-    benchmark_stream(nx, ny, t, k, compare_to_unstreamed=True, write_blockgraph_to_disk=True)
+    graph = _random_block_graph(nx, ny, t)
+    partitions = _partition_block_graph(graph, 3)
+
+    qmap = _generate_qubit_map(nx, ny, k)
+
+    iter1 = (
+        compile_block_graph(graph, observables=None)
+        .to_layer_tree()
+        .generate_circuit_stream(k, qmap)
+    )
+
+    stim1 = stim.Circuit()
+    for x in iter1:
+        stim1 += x
+
+        # output both circuits to files
+    with open("stim1.txt", "w+") as f:
+        f.write(str(stim1))
+    stim2 = stim.Circuit()
+
+    j = 0
+    for p in partitions:
+        compiled_p = compile_block_graph(p, observables=None)
+        lt = compiled_p.to_layer_tree()
+        iter2 = lt.generate_circuit_stream(k, qmap)
+
+        i = 0
+        buf = None
+        for x in iter2:
+            i += 1
+            if j != 0 and i < 6:
+                continue
+            if buf is not None:
+                stim2 += buf
+            buf = x
+
+        # this does not include the last buffer
+        if j == len(partitions) - 1:
+            stim2 += buf
+
+        j += 1
+
+    with open("stim2.txt", "w+") as f:
+        f.write(str(stim2))
+
+    # benchmark_stream(nx, ny, t, k, compare_to_unstreamed=True, write_blockgraph_to_disk=True)
