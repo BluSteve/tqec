@@ -1,5 +1,6 @@
 import random
 from time import time
+from typing import Iterator
 
 import stim
 
@@ -12,7 +13,7 @@ from tqec.utils import TQECError
 from tqec.utils.position import Position3D
 
 
-def _generate_qubit_map(x, y, k):
+def _generate_qubit_map(x, y, k) -> QubitMap:
     d = 2 * k + 1
     a = 2 * d
 
@@ -128,7 +129,7 @@ def _partition_block_graph(block_graph: BlockGraph, z_per_partition: int) -> lis
     zhi = z_per_partition - 1
 
     max_z = block_graph.bounding_box_size()[2]
-    while zhi <= max_z:
+    while zlo < max_z:
         cubes = set(filter(lambda cube: zlo <= cube.position.z <= zhi, block_graph.cubes))
         pipes = list(filter(lambda pipe: pipe.u in cubes and pipe.v in cubes, block_graph.pipes))
         graph_part = BlockGraph()
@@ -147,12 +148,13 @@ def _partition_block_graph(block_graph: BlockGraph, z_per_partition: int) -> lis
 
 
 def benchmark_stream(
-    nx: int,
-    ny: int,
-    t: int,
-    k: int,
-    compare_to_unstreamed: bool = False,
-    write_blockgraph_to_disk: bool = False,
+        nx: int,
+        ny: int,
+        t: int,
+        k: int,
+        compare_to_unstreamed: bool = False,
+        write_blockgraph_to_disk: bool = False,
+        block_graph_streaming: bool = False
 ) -> None:
     """Benchmark streaming generation of quantum circuits for a compiled block graph.
 
@@ -176,23 +178,25 @@ def benchmark_stream(
     """
     print(f"Benchmarking streaming with nx={nx}, ny={ny}, t={t}, k={k}\n")
 
-    start = time()
     block_graph = _random_block_graph(nx, ny, t)
-    if write_blockgraph_to_disk:
-        block_graph.view_as_html("block_graph.html")
-        surfaces = block_graph.find_correlation_surfaces()
-        print(f"Found {len(surfaces)} correlation surfaces.")
-        for i, surface in enumerate(surfaces):
-            block_graph.view_as_html(
-                f"block_graph_surface_{i}.html",
-                pop_faces_at_directions=("-Y", "+X"),
-                show_correlation_surface=surface,
-            )
 
-    compiled_graph = compile_block_graph(block_graph, observables="auto")
-    lt = compiled_graph.to_layer_tree()
-    end = time()
-    print(f"Layer tree generation time (s): {end - start}\n")
+    if not block_graph_streaming:
+        start = time()
+        if write_blockgraph_to_disk:
+            block_graph.view_as_html("block_graph.html")
+            surfaces = block_graph.find_correlation_surfaces()
+            print(f"Found {len(surfaces)} correlation surfaces.")
+            for i, surface in enumerate(surfaces):
+                block_graph.view_as_html(
+                    f"block_graph_surface_{i}.html",
+                    pop_faces_at_directions=("-Y", "+X"),
+                    show_correlation_surface=surface,
+                )
+
+        compiled_graph = compile_block_graph(block_graph, observables="auto")
+        lt = compiled_graph.to_layer_tree()
+        end = time()
+        print(f"Layer tree generation time (s): {end - start}\n")
 
     circuit = None
     if compare_to_unstreamed:
@@ -210,7 +214,8 @@ def benchmark_stream(
         )  # This qubit map is not tight on the qubits needed.
 
     start = time()
-    citer = lt.generate_circuit_stream(k, magic_qm)
+    citer = block_graph_stream(block_graph, k, magic_qm) if block_graph_streaming else (
+        lt.generate_circuit_stream(k, magic_qm))
     end = time()
     print(f"Initial stream generation time (s): {end - start}\n")
 
@@ -242,37 +247,14 @@ def benchmark_stream(
         assert same
 
 
-if __name__ == "__main__":
-    nx = 3
-    ny = 3
-    t = 9
-    k = 2
-
-    graph = _random_block_graph(nx, ny, t)
-    partitions = _partition_block_graph(graph, 3)
-
-    qmap = _generate_qubit_map(nx, ny, k)
-
-    iter1 = (
-        compile_block_graph(graph, observables=None)
-        .to_layer_tree()
-        .generate_circuit_stream(k, qmap)
-    )
-
-    stim1 = stim.Circuit()
-    for x in iter1:
-        stim1 += x
-
-        # output both circuits to files
-    with open("stim1.txt", "w+") as f:
-        f.write(str(stim1))
-    stim2 = stim.Circuit()
+def block_graph_stream(graph: BlockGraph, k: int, qubit_map: QubitMap) -> Iterator[stim.Circuit]:
+    partitions = _partition_block_graph(graph, 10)
 
     j = 0
     for p in partitions:
         compiled_p = compile_block_graph(p, observables=None)
         lt = compiled_p.to_layer_tree()
-        iter2 = lt.generate_circuit_stream(k, qmap)
+        iter2 = lt.generate_circuit_stream(k, qubit_map)
 
         i = 0
         buf = None
@@ -281,16 +263,48 @@ if __name__ == "__main__":
             if j != 0 and i < 6:
                 continue
             if buf is not None:
-                stim2 += buf
+                yield buf
             buf = x
 
         # this does not include the last buffer
         if j == len(partitions) - 1:
-            stim2 += buf
+            yield buf
 
         j += 1
 
-    with open("stim2.txt", "w+") as f:
-        f.write(str(stim2))
 
-    # benchmark_stream(nx, ny, t, k, compare_to_unstreamed=True, write_blockgraph_to_disk=True)
+if __name__ == "__main__":
+    nx = 3
+    ny = 3
+    t = 100
+    k = 1
+
+    graph = _random_block_graph(nx, ny, t)
+
+    # qmap = _generate_qubit_map(nx, ny, k)
+    #
+    # iter1 = (
+    #     compile_block_graph(graph, observables=None)
+    #     .to_layer_tree()
+    #     .generate_circuit_stream(k, qmap)
+    # )
+    #
+    # stim1 = stim.Circuit()
+    # for x in iter1:
+    #     stim1 += x
+    #
+    #     # output both circuits to files
+    # with open("stim1.txt", "w+") as f:
+    #     f.write(str(stim1))
+    #
+    # iter2 = block_graph_stream(graph, k, qmap)
+    #
+    # stim2 = stim.Circuit()
+    # for x in iter2:
+    #     stim2 += x
+    #
+    # with open("stim2.txt", "w+") as f:
+    #     f.write(str(stim2))
+
+    benchmark_stream(nx, ny, t, k, compare_to_unstreamed=False, write_blockgraph_to_disk=False,
+                     block_graph_streaming=True)
