@@ -7,6 +7,7 @@ from tqec import BlockGraph
 from tqec.circuit.qubit import GridQubit
 from tqec.circuit.qubit_map import QubitMap
 from tqec.compile.compile import compile_block_graph
+from tqec.computation.cube import ZXCube
 from tqec.utils import TQECError
 from tqec.utils.position import Position3D
 
@@ -43,7 +44,7 @@ def _random_block_graph(nx: int, ny: int, t: int) -> BlockGraph:
     # Create nxn grid at each time slice
     for x in range(nx):
         for y in range(ny):
-            graph.add_cube(Position3D(x, y, 0), r.choice(cd))
+            graph.add_cube(Position3D(x, y, 0), "P", label=f"input_{x}_{y}")
 
     # Add spatial connections within the first layer
     for x in range(nx):
@@ -61,7 +62,7 @@ def _random_block_graph(nx: int, ny: int, t: int) -> BlockGraph:
                 pass
 
     # Add temporal layers and connections
-    for i in range(1, t):
+    for i in range(1, t + 1):
         # Add all cubes in the nxn grid at time slice i
         for x in range(nx):
             for y in range(ny):
@@ -88,10 +89,35 @@ def _random_block_graph(nx: int, ny: int, t: int) -> BlockGraph:
                     except TQECError:
                         pass
 
+    # Add ports to the last layer
+    for x in range(nx):
+        for y in range(ny):
+            graph.add_cube(Position3D(x, y, t + 1), "P", label=f"output_{x}_{y}")
+
+            try:
+                graph.add_pipe(Position3D(x, y, t), Position3D(x, y, t + 1))
+            except TQECError:
+                pass
+
+    # fill ports randomly
+    mapping = {}
+    for x in range(nx):
+        for y in range(ny):
+            mapping[f"input_{x}_{y}"] = mapping[f"output_{x}_{y}"] = ZXCube.from_str(r.choice(cd))
+
+    graph.fill_ports(mapping)
+
     return graph
 
 
-def benchmark_stream(nx: int, ny: int, t: int, k: int, compare_to_unstreamed: bool = False) -> None:
+def benchmark_stream(
+    nx: int,
+    ny: int,
+    t: int,
+    k: int,
+    compare_to_unstreamed: bool = False,
+    write_blockgraph_to_disk: bool = False,
+) -> None:
     """Benchmark streaming generation of quantum circuits for a compiled block graph.
 
     Generates a block graph, compiles it into a layer tree, and produces circuit
@@ -116,6 +142,17 @@ def benchmark_stream(nx: int, ny: int, t: int, k: int, compare_to_unstreamed: bo
 
     start = time()
     block_graph = _random_block_graph(nx, ny, t)
+    if write_blockgraph_to_disk:
+        block_graph.view_as_html("block_graph.html")
+        surfaces = block_graph.find_correlation_surfaces()
+        print(f"Found {len(surfaces)} correlation surfaces.")
+        for i, surface in enumerate(surfaces):
+            block_graph.view_as_html(
+                f"block_graph_surface_{i}.html",
+                pop_faces_at_directions=("-Y", "+X"),
+                show_correlation_surface=surface,
+            )
+
     compiled_graph = compile_block_graph(block_graph, observables="auto")
     lt = compiled_graph.to_layer_tree()
     end = time()
@@ -173,6 +210,6 @@ if __name__ == "__main__":
     nx = 3
     ny = 3
     t = 10
-    k = 2
+    k = 1
 
-    benchmark_stream(nx, ny, t, k, compare_to_unstreamed=True)
+    benchmark_stream(nx, ny, t, k, compare_to_unstreamed=True, write_blockgraph_to_disk=True)
