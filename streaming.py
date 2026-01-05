@@ -1,4 +1,5 @@
 import random
+from pathos.multiprocessing import ProcessPool
 from time import time
 from typing import Iterator
 
@@ -247,48 +248,68 @@ def benchmark_stream(
         assert same
 
 
+def _compile_partition(partition_data: tuple[int, BlockGraph, int]) -> tuple[int, object, float]:
+    """Helper function to compile a single partition in parallel.
+
+    Args:
+        partition_data: Tuple of (partition_index, partition_block_graph, total_partitions)
+
+    Returns:
+        Tuple of (partition_index, layer_tree, compilation_time)
+    """
+    j, p, total = partition_data
+    start = time()
+    compiled_p = compile_block_graph(p, observables=None)  # todo does not work with observables
+    lt = compiled_p.to_layer_tree()
+    end = time()
+    compilation_time = end - start
+    return j, lt, compilation_time
+
+
 def block_graph_stream(graph: BlockGraph, k: int, qubit_map: QubitMap) -> Iterator[stim.Circuit]:
-    partitions = _partition_block_graph(graph, 10)
+    partitions = _partition_block_graph(graph, 50)
 
-    j = 0
-    for p in partitions:
-        start = time()
-        compiled_p = compile_block_graph(p, observables=None) # todo does not work with observables
-        lt = compiled_p.to_layer_tree()
-        end = time()
-        print(f"\nPartition {j}/{len(partitions)} layer tree generation time (s): {end - start}")
+    # Submit all compilation tasks in parallel
+    with ProcessPool() as pool:
+        # Create partition data for all partitions
+        partition_data_list = [(j, p, len(partitions)) for j, p in enumerate(partitions)]
 
-        iter2 = lt.generate_circuit_stream(k, qubit_map)
+        # Process all partitions in parallel
+        results = pool.map(_compile_partition, partition_data_list)
 
-        i = 0
-        buf = None
-        for x in iter2:
-            i += 1
-            if j != 0 and i < 6:
-                continue
-            if buf is not None:
+        # Process results in order
+        for j, (partition_index, lt, compilation_time) in enumerate(results):
+            print(f"\nPartition {partition_index}/{len(partitions)} layer tree generation time (s): {compilation_time}")
+
+            iter2 = lt.generate_circuit_stream(k, qubit_map)
+
+            i = 0
+            buf = None
+            for x in iter2:
+                i += 1
+                if j != 0 and i < 6:
+                    continue
+                if buf is not None:
+                    yield buf
+                buf = x
+
+            # this does not include the last buffer
+            if j == len(partitions) - 1:
                 yield buf
-            buf = x
-
-        # this does not include the last buffer
-        if j == len(partitions) - 1:
-            yield buf
-
-        j += 1
 
 
 if __name__ == "__main__":
-    nx = 10
-    ny = 10
+    nx = 3
+    ny = 3
     t = 1000
-    k = 2
+    k = 1
 
-    graph = _random_block_graph(nx, ny, t)
-
+    # graph = _random_block_graph(nx, ny, t)
+    #
     # qmap = _generate_qubit_map(nx, ny, k)
     #
     # iter1 = (
-    #     compile_block_graph(graph, observables='auto')
+    #     compile_block_graph(graph, observables=None)
     #     .to_layer_tree()
     #     .generate_circuit_stream(k, qmap)
     # )
