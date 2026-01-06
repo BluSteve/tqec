@@ -245,9 +245,10 @@ def benchmark_stream(
             else:
                 prx = circ
 
-            f.write(str(circ))
-            circuit_len += len(circ)
-            print(f"{i}, {time() - last:.8f}, {time() - start:.8f}, {circuit_len}, " + circ.__str__()[:20].replace("\n", " "))
+            s = str(circ)
+            f.write(s)
+            circuit_len += len(s)
+            print(f"{i}, {time() - last:.8f}, {time() - start:.8f}, {circuit_len}, " + prx.__str__()[:20].replace("\n", " "))
             if stop_after_first_instr and 'RX' in circ.__str__():
                 print("Found RX in circuit!")
                 return time() - init_time
@@ -279,7 +280,7 @@ def block_graph_stream(graph: BlockGraph, k: int, qubit_map: QubitMap, partition
         compiled_p = compile_block_graph(p, observables=None) # todo does not work with observables
         lt = compiled_p.to_layer_tree()
         end = time()
-        print(f"\nPartition {j+1}/{len(partitions)} layer tree generation time (s): {end - start}")
+        print(f"Partition {j+1}/{len(partitions)} layer tree generation time (s): {end - start}")
 
         iter2 = lt.generate_circuit_stream(k, qubit_map)
 
@@ -324,19 +325,19 @@ def response_times():
 
 
 if __name__ == "__main__":
-    nst, kst = response_times()
-    print(f'nst: {nst}')
-    print(f'kst: {kst}')
+    # nst, kst = response_times()
+    # print(f'nst: {nst}')
+    # print(f'kst: {kst}')
 
-    # nx = ny = 30
-    # t = 10
-    # k = 1
-    #
-    # graph = _random_block_graph(nx, ny, t)
-    # # graph.view_as_html("block_graph.html")
-    #
-    # benchmark_stream(nx, ny, t, k, compare_to_unstreamed=False, write_blockgraph_to_disk=False,
-    #                  block_graph_streaming=True, partition_length=2)
+    nx = ny = 5
+    t = 100
+    k = 2
+
+    graph = _random_block_graph(nx, ny, t)
+    # graph.view_as_html("block_graph.html")
+
+    benchmark_stream(nx, ny, t, k, compare_to_unstreamed=False, write_blockgraph_to_disk=False,
+                     block_graph_streaming=True, partition_length=10)
 
     # qmap = _generate_qubit_map(nx, ny, k)
     #

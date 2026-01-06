@@ -1,0 +1,125 @@
+/home/steve/IdeaProjects/tqec/.venv/bin/python /home/steve/IdeaProjects/tqec/streaming.py
+Benchmarking streaming with nx=3, ny=3, t=5, k=1
+
+Initial stream generation time (s): 0.00000024
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 0.2195911407470703
+0, 0.60710287, 0.60710859, 0,
+1, 0.02537751, 0.63249707, 265, QUBIT_COORDS(0, 0) 0
+2, 0.02454686, 0.65708876, 320, RX 2 6 10 20 21 22 2
+Found RX in circuit!
+n=3 took 0.65712667 seconds
+Benchmarking streaming with nx=5, ny=5, t=5, k=1
+
+Initial stream generation time (s): 0.00000048
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 0.6115775108337402
+0, 1.07099795, 1.07100201, 0,
+1, 0.06361699, 1.13463092, 761, QUBIT_COORDS(0, 0) 0
+2, 0.06523728, 1.19996834, 880, RX 2 6 10 14 18 20 2
+Found RX in circuit!
+n=5 took 1.20004725 seconds
+Benchmarking streaming with nx=10, ny=10, t=5, k=1
+
+Initial stream generation time (s): 0.00000024
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 2.63409423828125
+0, 3.04515386, 3.04515791, 0,
+1, 0.25020981, 3.29538226, 3121, QUBIT_COORDS(0, 0) 0
+2, 0.56128716, 3.85704780, 3540, RX 2 6 10 14 18 22 2
+Found RX in circuit!
+n=10 took 3.85733414 seconds
+Benchmarking streaming with nx=30, ny=30, t=5, k=1
+
+Initial stream generation time (s): 0.00000072
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 24.71342372894287
+0, 26.57794142, 26.57794619, 0,
+1, 2.34581590, 28.92377901, 28561, QUBIT_COORDS(0, 0) 0
+2, 4.76480222, 33.69217348, 32180, RX 2 6 10 14 18 22 2
+Found RX in circuit!
+n=30 took 33.69472528 seconds
+Benchmarking streaming with nx=50, ny=50, t=5, k=1
+
+Initial stream generation time (s): 0.00000095
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 70.66391229629517
+0, 73.35469055, 73.35469651, 0,
+1, 8.84532952, 82.20004177, 79601, QUBIT_COORDS(0, 0) 0
+2, 24.12631702, 106.33655977, 89620, RX 2 6 10 14 18 22 2
+Found RX in circuit!
+n=50 took 106.34372687 seconds
+Benchmarking streaming with nx=3, ny=3, t=5, k=1
+
+Initial stream generation time (s): 0.00000048
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 0.21526622772216797
+0, 0.42142606, 0.42143083, 0,
+1, 0.32765174, 0.74909496, 265, QUBIT_COORDS(0, 0) 0
+2, 0.02365017, 0.77279234, 320, RX 2 6 10 20 21 22 2
+Found RX in circuit!
+k=1 took 0.77283072 seconds
+Benchmarking streaming with nx=3, ny=3, t=5, k=2
+
+Initial stream generation time (s): 0.00000024
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 0.2164320945739746
+0, 0.54791188, 0.54791665, 0,
+1, 0.07687926, 0.62480783, 613, QUBIT_COORDS(0, 0) 0
+2, 0.08048439, 0.70537782, 740, RX 2 4 8 10 14 16 30
+Found RX in circuit!
+k=2 took 0.70546484 seconds
+Benchmarking streaming with nx=3, ny=3, t=5, k=5
+
+Initial stream generation time (s): 0.00000072
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 0.21672654151916504
+0, 0.73771000, 0.73771477, 0,
+1, 0.35845637, 1.09618688, 2521, QUBIT_COORDS(0, 0) 0
+2, 0.39551759, 1.49202847, 3080, RX 2 4 6 8 10 14 16
+Found RX in circuit!
+k=5 took 1.49244595 seconds
+Benchmarking streaming with nx=3, ny=3, t=5, k=10
+
+Initial stream generation time (s): 0.00000048
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 0.21770167350769043
+0, 0.74161768, 0.74162483, 0,
+1, 1.27510571, 2.01675034, 8581, QUBIT_COORDS(0, 0) 0
+2, 1.93976927, 3.95756984, 10580, RX 2 4 6 8 10 12 14
+Found RX in circuit!
+k=10 took 3.95912361 seconds
+Benchmarking streaming with nx=3, ny=3, t=5, k=20
+
+Initial stream generation time (s): 0.00000048
+
+Index, Time Taken (s), Time Elapsed (s), Total Circuit Size (bytes), Circuit Snippet
+
+Partition 1/5 layer tree generation time (s): 0.21933317184448242
+0, 0.84835076, 0.84835887, 0,
+1, 5.64077568, 6.48915648, 31501, QUBIT_COORDS(0, 0) 0
+2, 13.24880338, 19.74190068, 39080, RX 2 4 6 8 10 12 14
+Found RX in circuit!
+k=20 took 19.74816203 seconds
+nst: {3: 0.6571266651153564, 5: 1.200047254562378, 10: 3.8573341369628906, 30: 33.69472527503967, 50: 106.34372687339783}
+kst: {1: 0.7728307247161865, 2: 0.7054648399353027, 5: 1.492445945739746, 10: 3.9591236114501953, 20: 19.748162031173706}
+
+Process finished with exit code 0
