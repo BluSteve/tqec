@@ -379,7 +379,6 @@ class LayerTree:
     def generate_circuit_stream(
         self,
         k: int,
-        qubit_map: QubitMap,
         include_qubit_coords: bool = True,
         manhattan_radius: int = 2,
         detector_database: DetectorDatabase | None = None,
@@ -449,7 +448,7 @@ class LayerTree:
             else 1
         )
 
-        self._get_annotation(k).qubit_map = qubit_map
+        self._get_annotation(k).qubit_map = self._get_global_qubit_map(k)
 
         detectors_walker = AnnotateDetectorsOnLayerNode(
             k,
